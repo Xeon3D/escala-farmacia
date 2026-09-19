@@ -1,0 +1,15 @@
+# Base de dados e dados locais
+escala.db
+escala.db-wal
+escala.db-shm
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Editores e sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

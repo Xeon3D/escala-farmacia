@@ -1,0 +1,25 @@
+name: escala-farmacia
+
+services:
+  escala:
+    # Substitui <utilizador> pelo teu utilizador do Docker Hub depois do push.
+    # Para construir localmente em vez de descarregar, comenta a linha "image"
+    # e descomenta a linha "build".
+    image: <utilizador>/escala-farmacia:latest
+    # build: .
+    container_name: escala-farmacia
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      - escala-data:/data
+    environment:
+      TZ: Europe/Lisbon
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8765/api/health', timeout=4).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  escala-data:

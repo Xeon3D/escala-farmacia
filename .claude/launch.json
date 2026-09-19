@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "escala",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["server.py", "--port", "8765", "--no-browser"],
+      "port": 8765
+    }
+  ]
+}

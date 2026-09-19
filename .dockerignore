@@ -1,0 +1,10 @@
+.git
+.github
+.claude
+escala.db
+escala.db-wal
+escala.db-shm
+*.db
+escala-farmacia.html
+start.bat
+README.md
