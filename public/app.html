@@ -224,6 +224,9 @@ table.cfg{border-collapse:collapse;width:100%;min-width:940px}
 .cfg input[type=text],.cfg input[type=time],.cfg input[type=number],.field-inline input,.field-inline select{border:1px solid var(--line);background:var(--bg);border-radius:7px;padding:6px 8px;width:100%;font-variant-numeric:tabular-nums}
 .cfg input[type=number]{width:64px}
 .cfg input.short{width:70px}
+input.timein{font-family:var(--mono);text-align:center;letter-spacing:.02em}
+.cfg input.timein{width:82px}
+input.timein.bad{border-color:var(--bad);background:var(--bad-bg)}
 .cfg .hrs{font:13px var(--mono);color:var(--ink-2);white-space:nowrap}
 .cfg .c{text-align:center}
 .cfg input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
@@ -332,7 +335,7 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
 }
 </style>
 
-<div class="wrap">
+<div class="wrap" lang="pt-PT">
   <header class="top">
     <div class="brand">
       <svg class="cross" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="var(--accent)"/><path d="M16 8h8v8h8v8h-8v8h-8v-8H8v-8h8z" fill="var(--on-accent)"/></svg>
@@ -490,6 +493,23 @@ const toMin = s => { const [h, m] = String(s || '0:0').split(':').map(Number); r
 const fmtMin = m => { m = ((m % 1440) + 1440) % 1440; return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; };
 const fmtH = x => Number.isInteger(x) ? String(x) : (Math.round(x * 10) / 10).toFixed(1).replace('.', ',');
 const validTime = s => /^([01]\d|2[0-3]):[0-5]\d$/.test(s || '');
+/** Aceita 9, 9:5, 930, 0930, 9h30 e devolve sempre HH:MM entre 00:00 e 23:59. */
+function normalizeTime(raw) {
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (!digits) return '';
+  let h, m;
+  if (digits.length <= 2) { h = +digits; m = 0; }
+  else if (digits.length === 3) { h = +digits.slice(0, 1); m = +digits.slice(1); }
+  else { h = +digits.slice(0, 2); m = +digits.slice(2, 4); }
+  if (h > 23 || m > 59) return '';
+  return `${pad(h)}:${pad(m)}`;
+}
+/** Campo de hora em formato 24 h, independente da região do navegador. */
+function timeInput(id, value, label, attrs, ro) {
+  return `<input type="text" class="timein" id="${id}" value="${esc(value || '')}" ${attrs} data-time="1"
+    inputmode="numeric" maxlength="5" placeholder="00:00" autocomplete="off" spellcheck="false"
+    aria-label="${esc(label)} (formato 24 horas, HH:MM)" title="Formato de 24 horas, entre 00:00 e 23:59" ${ro}>`;
+}
 function span(sh) { const s = toMin(sh.start); let e = toMin(sh.end); if (e <= s) e += 1440; return [s, e]; }
 
 /* ---------- Datas ---------- */
@@ -1261,8 +1281,8 @@ function renderSettings() {
   const rows = c.shifts.map((s, i) => `<tr>
       <td><input type="text" id="cfg-${i}-name" data-cfg="shift" data-i="${i}" data-k="name" value="${esc(s.name)}" maxlength="30" aria-label="Nome do turno" ${ro}></td>
       <td><input type="text" class="short" id="cfg-${i}-short" data-cfg="shift" data-i="${i}" data-k="short" value="${esc(s.short)}" maxlength="4" aria-label="Abreviatura" ${ro}></td>
-      <td><input type="time" id="cfg-${i}-start" data-cfg="shift" data-i="${i}" data-k="start" value="${esc(s.start)}" step="900" aria-label="Início" ${ro}></td>
-      <td><input type="time" id="cfg-${i}-end" data-cfg="shift" data-i="${i}" data-k="end" value="${esc(s.end)}" step="900" aria-label="Fim" ${ro}></td>
+      <td>${timeInput(`cfg-${i}-start`, s.start, 'Início do turno', `data-cfg="shift" data-i="${i}" data-k="start"`, ro)}</td>
+      <td>${timeInput(`cfg-${i}-end`, s.end, 'Fim do turno', `data-cfg="shift" data-i="${i}" data-k="end"`, ro)}</td>
       <td class="c"><input type="checkbox" id="cfg-${i}-lunch" data-cfg="shift" data-i="${i}" data-k="lunch" ${s.lunch ? 'checked' : ''} aria-label="Tem almoço" ${ro}></td>
       <td class="c"><input type="checkbox" id="cfg-${i}-night" data-cfg="shift" data-i="${i}" data-k="night" ${s.night ? 'checked' : ''} aria-label="Turno noturno" ${ro}></td>
       <td class="c"><input type="checkbox" id="cfg-${i}-onlyDuty" data-cfg="shift" data-i="${i}" data-k="onlyDuty" ${s.onlyDuty ? 'checked' : ''} aria-label="Só no dia de plantão" ${ro}></td>
@@ -1295,7 +1315,7 @@ function renderSettings() {
     <h3>Plantão</h3>
     <p>Há um dia de plantão por semana e ele recua um dia a cada semana que passa. Indica o dia de uma semana de referência e o resto é calculado a partir daí — esta semana calha a ${DAYS_LONG[thisWeekDuty].toLowerCase()}.</p>
     <div class="rules-form">
-      <div class="field-inline"><label for="cfg-dutyAnchorWeek">Semana de referência</label><input type="date" id="cfg-dutyAnchorWeek" data-cfg="rule" data-k="dutyAnchorWeek" value="${esc(c.dutyAnchorWeek)}" ${ro}><small>Usa a segunda-feira dessa semana</small></div>
+      <div class="field-inline"><label for="cfg-dutyAnchorWeek">Semana de referência</label><input type="date" id="cfg-dutyAnchorWeek" data-cfg="rule" data-k="dutyAnchorWeek" value="${esc(c.dutyAnchorWeek)}" ${ro}><small>Segunda-feira dessa semana · ${esc(c.dutyAnchorWeek)} (ano-mês-dia)</small></div>
       <div class="field-inline"><label for="cfg-dutyAnchorDay">Dia de plantão nessa semana</label><select id="cfg-dutyAnchorDay" data-cfg="rule" data-k="dutyAnchorDay" ${ro}>${DAYS_LONG.map((d, i) => `<option value="${i}" ${+c.dutyAnchorDay === i ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
       <div class="field-inline"><label for="cfg-dutyStep">Dias que recua por semana</label><input type="number" id="cfg-dutyStep" data-cfg="rule" data-k="dutyStep" value="${+c.dutyStep || 0}" min="-6" max="6" ${ro}><small>1 = recua um dia; −1 avança</small></div>
     </div>
@@ -1303,11 +1323,11 @@ function renderSettings() {
   <section class="panel">
     <h3>Almoço, balcão, descanso e horas a dobrar</h3>
     <div class="rules-form">
-      <div class="field-inline"><label for="cfg-lunchFrom">Almoço a partir das</label><input type="time" id="cfg-lunchFrom" data-cfg="rule" data-k="lunchFrom" value="${esc(c.lunchFrom)}" step="1800" ${ro}></div>
-      <div class="field-inline"><label for="cfg-lunchTo">Almoço termina até às</label><input type="time" id="cfg-lunchTo" data-cfg="rule" data-k="lunchTo" value="${esc(c.lunchTo)}" step="1800" ${ro}></div>
+      <div class="field-inline"><label for="cfg-lunchFrom">Almoço a partir das</label>${timeInput('cfg-lunchFrom', c.lunchFrom, 'Almoço a partir das', 'data-cfg="rule" data-k="lunchFrom"', ro)}</div>
+      <div class="field-inline"><label for="cfg-lunchTo">Almoço termina até às</label>${timeInput('cfg-lunchTo', c.lunchTo, 'Almoço termina até às', 'data-cfg="rule" data-k="lunchTo"', ro)}</div>
       <div class="field-inline"><label for="cfg-lunchMin">Duração do almoço (min)</label><input type="number" id="cfg-lunchMin" data-cfg="rule" data-k="lunchMin" value="${+c.lunchMin || 60}" min="15" max="180" step="15" ${ro}></div>
-      <div class="field-inline"><label for="cfg-doubleFrom">Horas a dobrar a partir das</label><input type="time" id="cfg-doubleFrom" data-cfg="rule" data-k="doubleFrom" value="${esc(c.doubleFrom)}" step="900" ${ro}></div>
-      <div class="field-inline"><label for="cfg-doubleTo">Horas a dobrar até às</label><input type="time" id="cfg-doubleTo" data-cfg="rule" data-k="doubleTo" value="${esc(c.doubleTo)}" step="900" ${ro}></div>
+      <div class="field-inline"><label for="cfg-doubleFrom">Horas a dobrar a partir das</label>${timeInput('cfg-doubleFrom', c.doubleFrom, 'Horas a dobrar a partir das', 'data-cfg="rule" data-k="doubleFrom"', ro)}</div>
+      <div class="field-inline"><label for="cfg-doubleTo">Horas a dobrar até às</label>${timeInput('cfg-doubleTo', c.doubleTo, 'Horas a dobrar até às', 'data-cfg="rule" data-k="doubleTo"', ro)}</div>
       <div class="field-inline"><label for="cfg-doubleFactor">Multiplicador</label><input type="number" id="cfg-doubleFactor" data-cfg="rule" data-k="doubleFactor" value="${+c.doubleFactor || 2}" min="1" max="4" step="0.25" ${ro}><small>2 = as horas contam a dobrar</small></div>
       <div class="field-inline"><label for="cfg-minPresent">Mínimo ao balcão</label><input type="number" id="cfg-minPresent" data-cfg="rule" data-k="minPresent" value="${+c.minPresent || 0}" min="0" max="20" ${ro}><small>Pessoas presentes em cada meia hora de abertura</small></div>
       <div class="field-inline"><label for="cfg-minRest">Descanso entre turnos (h)</label><input type="number" id="cfg-minRest" data-cfg="rule" data-k="minRest" value="${+c.minRest || 0}" min="0" max="24" ${ro}><small>Pausa mínima entre dois dias de trabalho</small></div>
@@ -1617,7 +1637,12 @@ document.addEventListener('click', async ev => {
       c.dutyAnchorDay = Math.min(6, Math.max(0, +c.dutyAnchorDay || 0));
       c.dutyStep = Number.isFinite(+c.dutyStep) ? +c.dutyStep : 1;
       c.dutyAnchorWeek = iso(mondayOf(parseISO(/^\d{4}-\d{2}-\d{2}$/.test(c.dutyAnchorWeek) ? c.dutyAnchorWeek : DEFAULT_CONFIG.dutyAnchorWeek)));
-      c.shifts.forEach(s => { s.name = String(s.name).trim(); s.short = String(s.short || '').trim(); s.weekday = Math.max(0, +s.weekday || 0); s.weekend = Math.max(0, +s.weekend || 0); });
+      ['lunchFrom', 'lunchTo', 'doubleFrom', 'doubleTo'].forEach(k => { c[k] = normalizeTime(c[k]) || cfg()[k]; });
+      c.shifts.forEach(s => {
+        s.name = String(s.name).trim(); s.short = String(s.short || '').trim();
+        s.start = normalizeTime(s.start); s.end = normalizeTime(s.end);
+        s.weekday = Math.max(0, +s.weekday || 0); s.weekend = Math.max(0, +s.weekend || 0);
+      });
       const w = cfgWarnings(c).list;
       if (w.length) { toast(w[0]); break; }
       store.saveConfig(c); state.cfgDraft = null; state.cfgDirty = false; render(); toast('Turnos e regras guardados.'); break;
@@ -1768,6 +1793,7 @@ document.addEventListener('input', ev => {
     render();
     const s = $('#team-search'); s.focus(); try { s.setSelectionRange(pos, pos); } catch {}
   } else if (t.dataset?.cfg && t.type !== 'checkbox' && t.tagName !== 'SELECT') {
+    if (t.dataset.time) t.classList.toggle('bad', !!t.value.trim() && !normalizeTime(t.value));
     applyCfgInput(t);
     const save = document.querySelector('[data-action="cfg-save"]'); if (save && !state.readOnly) save.disabled = false;
     const disc = document.querySelector('[data-action="cfg-discard"]'); if (disc) disc.disabled = false;
@@ -1777,6 +1803,11 @@ document.addEventListener('input', ev => {
 document.addEventListener('change', ev => {
   const t = ev.target;
   if (!t.dataset?.cfg) return;
+  if (t.dataset.time) {
+    const clean = normalizeTime(t.value);
+    if (clean) { t.value = clean; t.classList.remove('bad'); }
+    else if (t.value.trim()) { t.classList.add('bad'); toast('Escreve a hora no formato 24 horas, entre 00:00 e 23:59.'); }
+  }
   applyCfgInput(t);
   if (t.type === 'checkbox' || t.tagName === 'SELECT') render(); else refreshCfgBits();
 });
