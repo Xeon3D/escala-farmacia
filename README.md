@@ -20,6 +20,39 @@ python server.py --port 9000 --host 0.0.0.0 --no-browser --db C:\caminho\escala.
 `--host 0.0.0.0` deixa outros computadores da rede local abrir a aplicação. Não há
 autenticação, por isso só o faças numa rede de confiança.
 
+## Contas e permissões
+
+Na primeira vez que abres a aplicação, ela pede para criares a conta de
+administrador. Não há contas nem palavras-passe predefinidas.
+
+| Papel | O que pode fazer |
+|---|---|
+| **Administrador** | Tudo: escala, equipa, turnos, regras, importar dados e gerir utilizadores |
+| **Ver apenas** | Consultar o horário, as horas e a equipa. Não altera nada |
+
+O separador **Utilizadores** (só para administradores) cria contas, muda o papel,
+define palavras-passe e apaga contas. Tem de ficar sempre pelo menos um administrador,
+e ninguém apaga a própria conta. Qualquer pessoa muda a sua palavra-passe no botão
+*Palavra-passe*, ao lado do nome.
+
+Detalhes: as palavras-passe são guardadas com PBKDF2-SHA256 (240 000 iterações e sal
+por conta); a sessão é um cookie `HttpOnly` com validade de 30 dias, guardado na base de
+dados apenas como resumo; mudar a palavra-passe fecha as outras sessões; oito tentativas
+falhadas seguidas bloqueiam o login dessa conta durante um minuto.
+
+Se perderes a palavra-passe de administrador, recupera-a na máquina do servidor:
+
+```bash
+python server.py --reset-admin o-teu-utilizador
+```
+
+O comando pede a nova palavra-passe, cria a conta se não existir, promove-a a
+administrador e fecha as sessões abertas. Em Docker:
+
+```bash
+docker exec -it escala-farmacia python server.py --reset-admin o-teu-utilizador
+```
+
 ## Docker
 
 ```bash

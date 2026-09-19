@@ -297,6 +297,28 @@ fieldset legend{padding:0;margin-bottom:8px}
 .form-warn{margin:0;padding:10px 12px;border-radius:9px;background:var(--warn-bg);color:var(--warn);font-size:13px}
 .form-warn ul{margin:4px 0 0;padding-left:18px}
 
+/* Entrada / contas */
+.gate{max-width:420px;margin:8vh auto 0;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:26px;box-shadow:var(--shadow)}
+.gate h2{font:600 22px var(--display);margin:0 0 4px}
+.gate p.lead{margin:0 0 20px;color:var(--ink-2);font-size:14px}
+.gate form{display:flex;flex-direction:column;gap:14px}
+.gate .field input{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 11px;width:100%}
+.gate .btn{justify-content:center}
+.gate .err{margin:0;padding:9px 12px;border-radius:9px;background:var(--bad-bg);color:var(--bad);font-size:13.5px}
+.whoami{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px 5px 3px 11px}
+.whoami b{color:var(--ink);font-weight:600}
+.whoami .role{font:10.5px var(--mono);text-transform:uppercase;letter-spacing:.05em;padding:1px 6px;border-radius:5px;background:var(--surface-2);color:var(--ink-2)}
+.whoami .role.admin{background:var(--accent-soft);color:var(--accent)}
+.whoami button{border:0;background:transparent;color:var(--ink-2);padding:3px 7px;border-radius:999px;font-size:12.5px}
+.whoami button:hover{background:var(--surface-2);color:var(--ink)}
+table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px}
+.users th,.users td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+.users thead th{font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
+.users tbody tr:last-child td{border-bottom:0}
+.users .u{font-family:var(--mono);font-size:13px}
+.users .me{font:10.5px var(--mono);text-transform:uppercase;letter-spacing:.05em;background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:5px;margin-left:6px}
+.users select{border:1px solid var(--line);background:var(--bg);border-radius:7px;padding:5px 8px}
+.users td.acts{text-align:right;white-space:nowrap}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:60;box-shadow:var(--shadow);max-width:calc(100vw - 32px)}
 .loading{padding:60px 0;text-align:center;color:var(--ink-3)}
 
@@ -321,11 +343,13 @@ fieldset legend{padding:0;margin-bottom:8px}
     </div>
     <div class="top-right">
       <span class="status" id="status"><i></i><span>A ligar…</span></span>
-      <nav class="tabs" role="tablist" aria-label="Secções">
+      <span id="whoami"></span>
+      <nav class="tabs" role="tablist" aria-label="Secções" id="tabs">
         <button class="tab" role="tab" id="tab-horario" data-action="tab" data-tab="horario" aria-selected="true">Horário</button>
         <button class="tab" role="tab" id="tab-horas" data-action="tab" data-tab="horas" aria-selected="false">Horas</button>
         <button class="tab" role="tab" id="tab-equipa" data-action="tab" data-tab="equipa" aria-selected="false">Equipa</button>
         <button class="tab" role="tab" id="tab-turnos" data-action="tab" data-tab="turnos" aria-selected="false">Turnos</button>
+        <button class="tab" role="tab" id="tab-utilizadores" data-action="tab" data-tab="utilizadores" aria-selected="false" hidden>Utilizadores</button>
       </nav>
     </div>
   </header>
@@ -388,6 +412,48 @@ fieldset legend{padding:0;margin-bottom:8px}
     <footer>
       <button value="no" class="btn">Cancelar</button>
       <button value="yes" class="btn primary" id="confirm-ok">Confirmar</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="userdlg">
+  <form class="dlg" id="user-form" method="dialog">
+    <header><h2 id="user-title">Novo utilizador</h2></header>
+    <div class="body">
+      <div class="row2">
+        <div class="field"><label for="u-username">Nome de utilizador</label><input type="text" id="u-username" maxlength="32" autocomplete="off" autocapitalize="none" spellcheck="false" required><p class="hint">Letras, números, ponto, hífen ou underscore. Entre 3 e 32 caracteres.</p></div>
+        <div class="field"><label for="u-name">Nome a mostrar</label><input type="text" id="u-name" maxlength="80" autocomplete="off"></div>
+      </div>
+      <div class="field"><label for="u-role">Permissões</label>
+        <select id="u-role">
+          <option value="viewer">Ver apenas — consulta a escala e as horas</option>
+          <option value="admin">Administrador — altera tudo e gere utilizadores</option>
+        </select>
+      </div>
+      <div class="field"><label for="u-pass">Palavra-passe</label><input type="password" id="u-pass" minlength="8" maxlength="200" autocomplete="new-password"><p class="hint" id="u-pass-hint">Mínimo de 8 caracteres.</p></div>
+      <div id="user-warn"></div>
+    </div>
+    <footer>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-action="close-user">Cancelar</button>
+      <button type="submit" class="btn primary">Guardar</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="pwdlg">
+  <form class="dlg" id="pw-form" method="dialog">
+    <header><h2>Mudar a minha palavra-passe</h2></header>
+    <div class="body">
+      <div class="field"><label for="pw-current">Palavra-passe atual</label><input type="password" id="pw-current" autocomplete="current-password" required></div>
+      <div class="field"><label for="pw-new">Nova palavra-passe</label><input type="password" id="pw-new" minlength="8" maxlength="200" autocomplete="new-password" required><p class="hint">Mínimo de 8 caracteres.</p></div>
+      <div class="field"><label for="pw-confirm">Repete a nova palavra-passe</label><input type="password" id="pw-confirm" minlength="8" maxlength="200" autocomplete="new-password" required></div>
+      <div id="pw-warn"></div>
+    </div>
+    <footer>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-action="close-pw">Cancelar</button>
+      <button type="submit" class="btn primary">Mudar</button>
     </footer>
   </form>
 </dialog>
@@ -471,6 +537,7 @@ const state = {
   month: `${now.getFullYear()}-${pad(now.getMonth() + 1)}`,
   tab: ['horario', 'horas', 'equipa', 'turnos'].includes(savedTab) ? savedTab : 'horario',
   search: '', mode: 'loading', loaded: { e: false, s: false, c: false }, readOnly: false,
+  user: null, setup: false, users: null, gateError: '',
 };
 
 /* ---------- Turnos, plantão ---------- */
@@ -537,15 +604,18 @@ const store = {
   db: null, api: false,
   async init() {
     if (HTTP) {
+      let me = null;
       try {
-        const r = await fetch('api/state', { headers: { accept: 'application/json' } });
-        if (r.ok) {
-          this.applyState(await r.json());
-          this.api = true; state.mode = 'api'; state.loaded = { e: true, s: true, c: true };
-          window.addEventListener('focus', () => this.refresh());
-          render(); return;
-        }
+        const r = await fetch('api/me', { headers: { accept: 'application/json' } });
+        if (r.ok) me = await r.json();
       } catch {}
+      if (me) {
+        this.api = true; state.mode = 'api';
+        state.user = me.user; state.setup = !!me.setup;
+        window.addEventListener('focus', () => this.refresh());
+        if (state.user) { await this.loadState(); } else { render(); }
+        return;
+      }
     }
     let db = null;
     try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch { db = null; }
@@ -559,22 +629,45 @@ const store = {
     state.config = s.config || null;
     if (!state.cfgDirty) state.cfgDraft = null;
   },
-  async refresh() {
-    if (!this.api || Object.values(writers).some(w => w.busy)) return;
+  async loadState() {
     try {
       const r = await fetch('api/state', { headers: { accept: 'application/json' } });
-      if (r.ok) { this.applyState(await r.json()); render(); }
-    } catch {}
+      if (r.status === 401) { state.user = null; render(); return; }
+      if (r.ok) {
+        this.applyState(await r.json());
+        state.loaded = { e: true, s: true, c: true };
+      }
+    } catch { toast('Não foi possível falar com o servidor.'); }
+    if (state.user) state.readOnly = state.user.role !== 'admin';
+    render();
+  },
+  async refresh() {
+    if (!this.api || !state.user || Object.values(writers).some(w => w.busy)) return;
+    await this.loadState();
+    if (state.tab === 'utilizadores') loadUsers();
+  },
+  /** Chamada à API que devolve os dados ou lança um erro com o código do servidor. */
+  async call(path, method, body) {
+    const r = await fetch(path, {
+      method, headers: { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const err = new Error(data.message || data.error || ('HTTP ' + r.status));
+      err.code = data.error; err.status = r.status; err.data = data;
+      throw err;
+    }
+    return data;
   },
   async send(path, method, body) {
-    try {
-      const r = await fetch(path, {
-        method, headers: { 'Content-Type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-      if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || r.status);
-      return true;
-    } catch (e) { toast('Não foi possível guardar na base de dados: ' + e.message); return false; }
+    try { await this.call(path, method, body); return true; }
+    catch (e) {
+      if (e.status === 401) { state.user = null; render(); toast('A sessão expirou. Entra outra vez.'); }
+      else if (e.status === 403) { state.readOnly = true; render(); toast('A tua conta só tem permissão de leitura.'); }
+      else toast('Não foi possível guardar na base de dados: ' + e.message);
+      return false;
+    }
   },
   subscribe() {
     this.db.collection('employees').onSnapshot(snap => {
@@ -810,17 +903,87 @@ function render() {
   st.lastElementChild.textContent = state.mode === 'api' ? 'Base de dados SQLite'
     : state.mode === 'db' ? 'Partilhado · sincronizado'
     : state.mode === 'local' ? 'Guardado neste navegador' : 'A ligar…';
+  /* Sem sessão: só o ecrã de entrada */
+  const gated = state.mode === 'api' && !state.user;
+  $('#tabs').hidden = gated;
+  $('#whoami').innerHTML = state.user ? `<span class="whoami"><b>${esc(state.user.name || state.user.username)}</b><span class="role ${state.user.role}">${state.user.role === 'admin' ? 'admin' : 'ver'}</span><button data-action="my-password" title="Mudar a minha palavra-passe">Palavra-passe</button><button data-action="logout">Sair</button></span>` : '';
+  if (gated) { $('#banner').innerHTML = ''; $('#view').innerHTML = state.setup ? renderSetup() : renderLogin(); return; }
+  $('#tab-utilizadores').hidden = !(state.mode === 'api' && state.user?.role === 'admin');
+  if (state.tab === 'utilizadores' && $('#tab-utilizadores').hidden) state.tab = 'horario';
   document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === state.tab)));
   $('#tab-turnos').innerHTML = 'Turnos' + (state.cfgDirty ? '<span class="badge" title="Alterações por guardar"></span>' : '');
-  $('#banner').innerHTML = state.readOnly
+  $('#banner').innerHTML = state.readOnly && state.mode === 'api'
+    ? '<div class="banner">A tua conta só tem permissão para ver. Pede a um administrador para alterar a escala.</div>'
+    : state.readOnly
     ? '<div class="banner">Estás a ver a escala só em modo de leitura — as alterações não são guardadas.</div>'
     : state.mode === 'local' ? '<div class="banner">Modo local: os dados ficam guardados apenas neste navegador. Para usar a base de dados SQLite, abre a aplicação pelo servidor (<code>python server.py</code>).</div>' : '';
   if (state.mode === 'loading' || !state.loaded.e || !state.loaded.s || !state.loaded.c) { $('#view').innerHTML = '<div class="loading">A carregar a escala…</div>'; return; }
   const focusId = document.activeElement?.id;
   $('#view').innerHTML = state.tab === 'horario' ? renderSchedule()
     : state.tab === 'horas' ? renderHours()
-    : state.tab === 'equipa' ? renderTeam() : renderSettings();
+    : state.tab === 'equipa' ? renderTeam()
+    : state.tab === 'utilizadores' ? renderUsers() : renderSettings();
   if (focusId && focusId.startsWith('cfg-')) { const f = document.getElementById(focusId); if (f) f.focus(); }
+}
+
+/* ---------- Entrada e contas ---------- */
+function renderLogin() {
+  return `<div class="gate">
+    <h2>Entrar</h2>
+    <p class="lead">Escala da farmácia. Entra com a tua conta para ver ou alterar os turnos.</p>
+    ${state.gateError ? `<p class="err">${esc(state.gateError)}</p>` : ''}
+    <form data-action="login-form" id="login-form">
+      <div class="field"><label for="login-user">Nome de utilizador</label><input type="text" id="login-user" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus></div>
+      <div class="field"><label for="login-pass">Palavra-passe</label><input type="password" id="login-pass" autocomplete="current-password" required></div>
+      <button type="submit" class="btn primary">Entrar</button>
+    </form>
+  </div>`;
+}
+function renderSetup() {
+  return `<div class="gate">
+    <h2>Criar o administrador</h2>
+    <p class="lead">Esta instalação ainda não tem contas. Cria a primeira, que fica com permissão para alterar tudo e gerir os outros utilizadores.</p>
+    ${state.gateError ? `<p class="err">${esc(state.gateError)}</p>` : ''}
+    <form data-action="setup-form" id="setup-form">
+      <div class="field"><label for="setup-user">Nome de utilizador</label><input type="text" id="setup-user" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="32" required autofocus></div>
+      <div class="field"><label for="setup-name">Nome a mostrar</label><input type="text" id="setup-name" autocomplete="name" maxlength="80"></div>
+      <div class="field"><label for="setup-pass">Palavra-passe</label><input type="password" id="setup-pass" autocomplete="new-password" minlength="8" maxlength="200" required><p class="hint">Mínimo de 8 caracteres. Guarda-a bem: não há forma de a recuperar pela aplicação.</p></div>
+      <button type="submit" class="btn primary">Criar conta e entrar</button>
+    </form>
+  </div>`;
+}
+async function loadUsers() {
+  try { state.users = (await store.call('api/users', 'GET')).users; }
+  catch (e) { state.users = []; toast('Não foi possível ler os utilizadores: ' + e.message); }
+  if (state.tab === 'utilizadores') render();
+}
+function renderUsers() {
+  if (state.users === null) { loadUsers(); return '<div class="loading">A carregar utilizadores…</div>'; }
+  const rows = state.users.map(u => {
+    const me = u.id === state.user.id;
+    return `<tr>
+      <td><b>${esc(u.name || u.username)}</b>${me ? '<span class="me">tu</span>' : ''}<br><span class="u">${esc(u.username)}</span></td>
+      <td><select data-action="user-role" data-id="${esc(u.id)}" aria-label="Permissões de ${esc(u.username)}">
+        <option value="viewer" ${u.role === 'viewer' ? 'selected' : ''}>Ver apenas</option>
+        <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administrador</option>
+      </select></td>
+      <td class="u">${esc((u.createdAt || '').slice(0, 10))}</td>
+      <td class="acts">
+        <button class="btn" data-action="user-password" data-id="${esc(u.id)}">Definir palavra-passe</button>
+        <button class="btn danger" data-action="user-delete" data-id="${esc(u.id)}" ${me ? 'disabled title="Não podes apagar a tua própria conta"' : ''}>Apagar</button>
+      </td>
+    </tr>`;
+  }).join('');
+  return `
+  <div class="team-head">
+    <h2>Utilizadores <small>${state.users.length} ${state.users.length === 1 ? 'conta' : 'contas'}</small></h2>
+    <div class="actions"><button class="btn primary" data-action="user-new">Adicionar utilizador</button></div>
+  </div>
+  <div class="grid-wrap"><table class="users">
+    <thead><tr><th>Conta</th><th>Permissões</th><th>Criada</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>
+  <p class="note"><b>Ver apenas</b>: consulta o horário, as horas e a equipa, sem poder mudar nada. <b>Administrador</b>: altera a escala, a equipa, os turnos e gere os utilizadores. Tem de haver sempre pelo menos um administrador.</p>`;
 }
 
 function personHTML(e, compact) {
@@ -1379,6 +1542,23 @@ document.addEventListener('click', async ev => {
   if (!['cell', 'pick', 'lunch'].includes(a)) closeMenu();
   switch (a) {
     case 'tab': state.tab = el.dataset.tab; ls.set('escala.tab', state.tab); render(); window.scrollTo(0, 0); break;
+    case 'logout':
+      await fetch('api/logout', { method: 'POST' }).catch(() => {});
+      state.user = null; state.users = null; state.gateError = '';
+      state.employees = {}; state.schedules = {}; state.config = null;
+      render(); break;
+    case 'my-password': openPw(); break;
+    case 'close-pw': $('#pwdlg').close(); break;
+    case 'close-user': $('#userdlg').close(); break;
+    case 'user-new': openUser(null); break;
+    case 'user-password': openUser(state.users.find(u => u.id === el.dataset.id)); break;
+    case 'user-delete': {
+      const u = state.users.find(x => x.id === el.dataset.id); if (!u) break;
+      if (!await confirmBox('Apagar utilizador', `Apagar a conta ${u.username}? A pessoa deixa de conseguir entrar.`, 'Apagar', true)) break;
+      try { await store.call('api/users/' + encodeURIComponent(u.id), 'DELETE'); toast(`Conta ${u.username} apagada.`); }
+      catch (e) { toast(e.code === 'last_admin' ? 'Tem de ficar pelo menos um administrador.' : 'Não foi possível apagar: ' + e.message); }
+      loadUsers(); break;
+    }
     case 'week': state.week = shiftWeek(state.week, +el.dataset.n); render(); break;
     case 'today': state.week = iso(mondayOf(new Date())); render(); break;
     case 'month': state.month = shiftMonth(state.month, +el.dataset.n); render(); break;
@@ -1460,6 +1640,109 @@ document.addEventListener('click', async ev => {
     }
   }
 });
+/* Formulários de entrada, criação da primeira conta e contas */
+document.addEventListener('submit', async ev => {
+  const form = ev.target;
+  if (form.id === 'login-form') {
+    ev.preventDefault();
+    state.gateError = '';
+    const btn = form.querySelector('button[type=submit]'); btn.disabled = true;
+    try {
+      const r = await store.call('api/login', 'POST', { username: $('#login-user').value.trim(), password: $('#login-pass').value });
+      state.user = r.user; state.gateError = ''; state.users = null;
+      await store.loadState();
+    } catch (e) {
+      state.gateError = e.code === 'too_many_attempts'
+        ? `Demasiadas tentativas. Tenta de novo daqui a ${e.data.retryAfter || 60} segundos.`
+        : e.code === 'invalid_credentials' ? 'Utilizador ou palavra-passe errados.' : 'Não foi possível entrar: ' + e.message;
+      render();
+      const f = $('#login-user'); if (f) f.focus();
+    }
+  } else if (form.id === 'setup-form') {
+    ev.preventDefault();
+    const btn = form.querySelector('button[type=submit]'); btn.disabled = true;
+    try {
+      const r = await store.call('api/setup', 'POST', {
+        username: $('#setup-user').value.trim(), name: $('#setup-name').value.trim(), password: $('#setup-pass').value,
+      });
+      state.user = r.user; state.setup = false; state.gateError = '';
+      await store.loadState();
+      toast('Conta criada. Já podes gerir a escala.');
+    } catch (e) {
+      state.gateError = e.code === 'invalid_username'
+        ? 'O nome de utilizador só pode ter letras, números, ponto, hífen ou underscore, entre 3 e 32 caracteres.'
+        : e.message;
+      render();
+    }
+  } else if (form.id === 'user-form') {
+    ev.preventDefault();
+    const id = form.dataset.id || '';
+    const body = {
+      username: $('#u-username').value.trim(), name: $('#u-name').value.trim(),
+      role: $('#u-role').value, password: $('#u-pass').value,
+    };
+    if (!id && !body.password) { $('#user-warn').innerHTML = '<div class="form-warn">Define uma palavra-passe para a nova conta.</div>'; return; }
+    try {
+      if (id) {
+        const r = await store.call('api/users/' + encodeURIComponent(id), 'PUT', { name: body.name, role: body.role, ...(body.password ? { password: body.password } : {}) });
+        if (id === state.user.id && r.user) state.user = r.user;
+        toast('Conta atualizada.');
+      } else {
+        await store.call('api/users', 'POST', body);
+        toast(`Conta ${body.username} criada.`);
+      }
+      $('#userdlg').close();
+      loadUsers();
+    } catch (e) {
+      const msg = e.code === 'username_taken' ? 'Já existe uma conta com esse nome de utilizador.'
+        : e.code === 'invalid_username' ? 'Nome de utilizador inválido (3 a 32 caracteres: letras, números, . - _).'
+        : e.code === 'last_admin' ? 'Tem de ficar pelo menos um administrador.' : e.message;
+      $('#user-warn').innerHTML = `<div class="form-warn">${esc(msg)}</div>`;
+    }
+  } else if (form.id === 'pw-form') {
+    ev.preventDefault();
+    const nova = $('#pw-new').value;
+    if (nova !== $('#pw-confirm').value) { $('#pw-warn').innerHTML = '<div class="form-warn">As duas palavras-passe novas não coincidem.</div>'; return; }
+    try {
+      await store.call('api/password', 'POST', { current: $('#pw-current').value, password: nova });
+      $('#pwdlg').close(); toast('Palavra-passe alterada.');
+    } catch (e) {
+      $('#pw-warn').innerHTML = `<div class="form-warn">${esc(e.code === 'invalid_credentials' ? 'A palavra-passe atual não está certa.' : e.message)}</div>`;
+    }
+  }
+});
+document.addEventListener('change', async ev => {
+  const sel = ev.target.closest('[data-action="user-role"]');
+  if (!sel) return;
+  const u = state.users.find(x => x.id === sel.dataset.id);
+  try {
+    const r = await store.call('api/users/' + encodeURIComponent(sel.dataset.id), 'PUT', { role: sel.value });
+    if (sel.dataset.id === state.user.id) { state.user = r.user; state.readOnly = r.user.role !== 'admin'; }
+    toast(`${u?.username || 'Conta'}: ${sel.value === 'admin' ? 'administrador' : 'ver apenas'}.`);
+  } catch (e) {
+    toast(e.code === 'last_admin' ? 'Tem de ficar pelo menos um administrador.' : 'Não foi possível mudar: ' + e.message);
+  }
+  loadUsers();
+});
+function openUser(u) {
+  const f = $('#user-form');
+  f.dataset.id = u ? u.id : '';
+  $('#user-title').textContent = u ? `Conta de ${u.username}` : 'Novo utilizador';
+  $('#u-username').value = u ? u.username : '';
+  $('#u-username').disabled = !!u;
+  $('#u-name').value = u ? (u.name || '') : '';
+  $('#u-role').value = u ? u.role : 'viewer';
+  $('#u-pass').value = '';
+  $('#u-pass-hint').textContent = u ? 'Mínimo de 8 caracteres. Deixa em branco para manter a atual.' : 'Mínimo de 8 caracteres.';
+  $('#user-warn').innerHTML = '';
+  $('#userdlg').showModal();
+  (u ? $('#u-pass') : $('#u-username')).focus();
+}
+function openPw() {
+  $('#pw-form').reset(); $('#pw-warn').innerHTML = '';
+  $('#pwdlg').showModal(); $('#pw-current').focus();
+}
+
 document.addEventListener('keydown', ev => {
   if (menu.hidden) return;
   if (ev.key === 'Escape') { ev.preventDefault(); closeMenu(true); }

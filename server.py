@@ -11,13 +11,18 @@ apenas a biblioteca padrão do Python.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import os
 import re
+import secrets
 import sqlite3
 import sys
 import threading
+import time
 import webbrowser
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -102,7 +107,28 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS users (
+  id         TEXT PRIMARY KEY,
+  username   TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  name       TEXT NOT NULL DEFAULT '',
+  role       TEXT NOT NULL DEFAULT 'viewer',
+  pw_salt    TEXT NOT NULL,
+  pw_hash    TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at REAL NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
 """
+
+COOKIE = "escala_session"
+SESSION_DAYS = 30
+PBKDF_ROUNDS = 240_000
+USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{3,32}$")
 
 lock = threading.Lock()
 conn: sqlite3.Connection
@@ -137,6 +163,116 @@ def init_data() -> None:
                     (eid, name, role, color, night, weekend, json.dumps(pref), json.dumps(off), mx, json.dumps(fixed), notes),
                 )
         conn.commit()
+
+
+# ---------------------------------------------------------- autenticação
+
+def hash_password(password: str) -> tuple[str, str]:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF_ROUNDS)
+    return salt.hex(), digest.hex()
+
+
+def verify_password(password: str, salt_hex: str, hash_hex: str) -> bool:
+    try:
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), PBKDF_ROUNDS)
+    except ValueError:
+        return False
+    return hmac.compare_digest(digest.hex(), hash_hex)
+
+
+def user_count() -> int:
+    with lock:
+        return conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
+
+
+def public_user(row) -> dict:
+    return {"id": row["id"], "username": row["username"], "name": row["name"],
+            "role": row["role"], "createdAt": row["created_at"]}
+
+
+def create_user(username: str, password: str, name: str, role: str) -> dict:
+    salt, digest = hash_password(password)
+    uid = "u" + secrets.token_hex(8)
+    with lock:
+        conn.execute(
+            "INSERT INTO users (id,username,name,role,pw_salt,pw_hash) VALUES (?,?,?,?,?,?)",
+            (uid, username, name[:80], role, salt, digest),
+        )
+        conn.commit()
+        return public_user(conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
+
+
+def set_password(uid: str, password: str) -> None:
+    salt, digest = hash_password(password)
+    with lock:
+        conn.execute("UPDATE users SET pw_salt=?, pw_hash=? WHERE id=?", (salt, digest, uid))
+        # Sessões antigas deixam de valer quando a palavra-passe muda.
+        conn.execute("DELETE FROM sessions WHERE user_id=?", (uid,))
+        conn.commit()
+
+
+def open_session(uid: str) -> str:
+    token = secrets.token_urlsafe(32)
+    with lock:
+        conn.execute("DELETE FROM sessions WHERE expires_at < ?", (time.time(),))
+        conn.execute(
+            "INSERT INTO sessions (token_hash,user_id,expires_at) VALUES (?,?,?)",
+            (hashlib.sha256(token.encode()).hexdigest(), uid, time.time() + SESSION_DAYS * 86400),
+        )
+        conn.commit()
+    return token
+
+
+def session_user(token: str):
+    if not token:
+        return None
+    with lock:
+        row = conn.execute(
+            "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id"
+            " WHERE s.token_hash = ? AND s.expires_at > ?",
+            (hashlib.sha256(token.encode()).hexdigest(), time.time()),
+        ).fetchone()
+    return row
+
+
+def close_session(token: str) -> None:
+    if not token:
+        return
+    with lock:
+        conn.execute("DELETE FROM sessions WHERE token_hash=?", (hashlib.sha256(token.encode()).hexdigest(),))
+        conn.commit()
+
+
+# Travão simples a tentativas de adivinhar palavras-passe.
+_attempts: dict[str, list] = {}
+_attempts_lock = threading.Lock()
+
+
+def login_blocked(key: str) -> int:
+    with _attempts_lock:
+        count, until = _attempts.get(key, (0, 0.0))
+        return max(0, int(until - time.time())) if count >= 8 else 0
+
+
+def login_failed(key: str) -> None:
+    with _attempts_lock:
+        count, _ = _attempts.get(key, (0, 0.0))
+        count += 1
+        _attempts[key] = (count, time.time() + (60 if count >= 8 else 0))
+
+
+def login_ok(key: str) -> None:
+    with _attempts_lock:
+        _attempts.pop(key, None)
+
+
+def password_problem(password: str) -> str | None:
+    if not isinstance(password, str) or len(password) < 8:
+        return "A palavra-passe tem de ter pelo menos 8 caracteres."
+    if len(password) > 200:
+        return "A palavra-passe é demasiado longa."
+    return None
 
 
 # ---------------------------------------------------------------- leitura
@@ -292,21 +428,56 @@ def page_html() -> bytes:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "EscalaFarmacia/1.0"
+    server_version = "EscalaFarmacia/1.1"
 
     def log_message(self, fmt, *args):  # menos ruído na consola
         if self.path.startswith("/api/") and self.command != "GET":
-            print(f"{self.command} {self.path} → {args[1] if len(args) > 1 else ''}")
+            print(f"{self.command} {self.path} -> {args[1] if len(args) > 1 else ''}")
 
     # -- utilitários
-    def send_json(self, data, status=200):
+    def send_json(self, data, status=200, cookie=None):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
         self.end_headers()
         self.wfile.write(body)
+
+    # -- sessão
+    @property
+    def token(self) -> str:
+        raw = self.headers.get("Cookie")
+        if not raw:
+            return ""
+        try:
+            morsel = SimpleCookie(raw).get(COOKIE)
+        except Exception:  # noqa: BLE001 - cookie malformado
+            return ""
+        return morsel.value if morsel else ""
+
+    def cookie_header(self, token: str | None) -> str:
+        secure = "; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else ""
+        if token is None:
+            return f"{COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax{secure}"
+        return (f"{COOKIE}={token}; Path=/; Max-Age={SESSION_DAYS * 86400};"
+                f" HttpOnly; SameSite=Lax{secure}")
+
+    def current_user(self):
+        return session_user(self.token)
+
+    def require(self, admin: bool):
+        """Devolve o utilizador ou responde 401/403 e devolve None."""
+        user = self.current_user()
+        if user is None:
+            self.send_json({"error": "unauthenticated", "setup": user_count() == 0}, 401)
+            return None
+        if admin and user["role"] != "admin":
+            self.send_json({"error": "forbidden"}, 403)
+            return None
+        return user
 
     def send_bytes(self, body: bytes, ctype: str, status=200):
         self.send_response(status)
@@ -335,9 +506,24 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_bytes(b"public/app.html not found", "text/plain; charset=utf-8", 500)
         if path == "/api/health":
             return self.send_json({"ok": True})
+        if path == "/api/me":
+            user = self.current_user()
+            if user is None:
+                return self.send_json({"user": None, "setup": user_count() == 0})
+            return self.send_json({"user": public_user(user), "setup": False})
+        if path == "/api/users":
+            if not self.require(admin=True):
+                return None
+            with lock:
+                rows = conn.execute("SELECT * FROM users ORDER BY username COLLATE NOCASE").fetchall()
+            return self.send_json({"users": [public_user(r) for r in rows]})
         if path == "/api/state":
+            if not self.require(admin=False):
+                return None
             return self.send_json(read_state())
         if path == "/api/export":
+            if not self.require(admin=False):
+                return None
             data = read_state()
             body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
             self.send_response(200)
@@ -356,6 +542,10 @@ class Handler(BaseHTTPRequestHandler):
         if data is None:
             return self.send_json({"error": "invalid_json"}, 400)
         parts = [p for p in path.split("/") if p]
+        if len(parts) == 3 and parts[:2] == ["api", "users"]:
+            return self.update_user(parts[2], data)
+        if not self.require(admin=True):
+            return None
         if len(parts) == 3 and parts[:2] == ["api", "employees"]:
             if not ID_RE.match(parts[2]):
                 return self.send_json({"error": "invalid_id"}, 400)
@@ -374,8 +564,26 @@ class Handler(BaseHTTPRequestHandler):
         return self.send_json({"error": "not_found"}, 404)
 
     def do_POST(self):
-        if self.path.split("?", 1)[0] == "/api/import":
-            data = self.read_json()
+        path = self.path.split("?", 1)[0]
+        data = self.read_json()
+        if data is None and path not in ("/api/logout",):
+            return self.send_json({"error": "invalid_json"}, 400)
+
+        if path == "/api/setup":
+            return self.do_setup(data)
+        if path == "/api/login":
+            return self.do_login(data)
+        if path == "/api/logout":
+            close_session(self.token)
+            return self.send_json({"ok": True}, cookie=self.cookie_header(None))
+        if path == "/api/password":
+            return self.change_own_password(data)
+        if path == "/api/users":
+            return self.add_user(data)
+
+        if not self.require(admin=True):
+            return None
+        if path == "/api/import":
             if not isinstance(data, dict):
                 return self.send_json({"error": "invalid_json"}, 400)
             import_state(data)
@@ -384,10 +592,160 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self):
         parts = [p for p in self.path.split("?", 1)[0].split("/") if p]
+        if len(parts) == 3 and parts[:2] == ["api", "users"]:
+            return self.delete_user(parts[2])
+        if not self.require(admin=True):
+            return None
         if len(parts) == 3 and parts[:2] == ["api", "employees"] and ID_RE.match(parts[2]):
             delete_employee(parts[2])
             return self.send_json({"ok": True})
         return self.send_json({"error": "not_found"}, 404)
+
+    # ------------------------------------------------------ contas
+
+    def do_setup(self, data):
+        """Cria o primeiro administrador. Só funciona com a base de dados sem contas."""
+        if user_count() > 0:
+            return self.send_json({"error": "already_set_up"}, 409)
+        username = str((data or {}).get("username", "")).strip()
+        password = (data or {}).get("password", "")
+        if not USERNAME_RE.match(username):
+            return self.send_json({"error": "invalid_username"}, 400)
+        problem = password_problem(password)
+        if problem:
+            return self.send_json({"error": "weak_password", "message": problem}, 400)
+        user = create_user(username, password, str((data or {}).get("name", "")).strip() or username, "admin")
+        token = open_session(user["id"])
+        return self.send_json({"user": user}, cookie=self.cookie_header(token))
+
+    def do_login(self, data):
+        username = str((data or {}).get("username", "")).strip()
+        password = (data or {}).get("password", "")
+        key = username.lower() or "?"
+        wait = login_blocked(key)
+        if wait:
+            return self.send_json({"error": "too_many_attempts", "retryAfter": wait}, 429)
+        with lock:
+            row = conn.execute("SELECT * FROM users WHERE username = ? COLLATE NOCASE", (username,)).fetchone()
+        if row is None or not verify_password(str(password), row["pw_salt"], row["pw_hash"]):
+            login_failed(key)
+            time.sleep(0.4)
+            return self.send_json({"error": "invalid_credentials"}, 401)
+        login_ok(key)
+        token = open_session(row["id"])
+        return self.send_json({"user": public_user(row)}, cookie=self.cookie_header(token))
+
+    def change_own_password(self, data):
+        user = self.require(admin=False)
+        if not user:
+            return None
+        if not verify_password(str((data or {}).get("current", "")), user["pw_salt"], user["pw_hash"]):
+            return self.send_json({"error": "invalid_credentials"}, 403)
+        problem = password_problem((data or {}).get("password"))
+        if problem:
+            return self.send_json({"error": "weak_password", "message": problem}, 400)
+        set_password(user["id"], (data or {})["password"])
+        token = open_session(user["id"])  # a sessão atual é renovada
+        return self.send_json({"ok": True}, cookie=self.cookie_header(token))
+
+    def add_user(self, data):
+        if not self.require(admin=True):
+            return None
+        username = str((data or {}).get("username", "")).strip()
+        if not USERNAME_RE.match(username):
+            return self.send_json({"error": "invalid_username"}, 400)
+        problem = password_problem((data or {}).get("password"))
+        if problem:
+            return self.send_json({"error": "weak_password", "message": problem}, 400)
+        role = "admin" if (data or {}).get("role") == "admin" else "viewer"
+        try:
+            user = create_user(username, (data or {})["password"], str((data or {}).get("name", "")).strip() or username, role)
+        except sqlite3.IntegrityError:
+            return self.send_json({"error": "username_taken"}, 409)
+        return self.send_json({"user": user})
+
+    def update_user(self, uid: str, data):
+        """Um administrador muda nome, papel ou palavra-passe de qualquer conta."""
+        me = self.require(admin=True)
+        if not me:
+            return None
+        with lock:
+            row = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+        if row is None:
+            return self.send_json({"error": "not_found"}, 404)
+        role = data.get("role")
+        if role in ("admin", "viewer") and role != row["role"]:
+            if row["role"] == "admin" and role == "viewer" and self.last_admin(uid):
+                return self.send_json({"error": "last_admin"}, 409)
+            with lock:
+                conn.execute("UPDATE users SET role=? WHERE id=?", (role, uid))
+                conn.commit()
+        if "name" in data:
+            with lock:
+                conn.execute("UPDATE users SET name=? WHERE id=?", (str(data["name"]).strip()[:80], uid))
+                conn.commit()
+        if data.get("password"):
+            problem = password_problem(data["password"])
+            if problem:
+                return self.send_json({"error": "weak_password", "message": problem}, 400)
+            set_password(uid, data["password"])
+            if uid == me["id"]:  # não fiques à porta depois de mudares a tua
+                token = open_session(uid)
+                with lock:
+                    fresh = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+                return self.send_json({"user": public_user(fresh)}, cookie=self.cookie_header(token))
+        with lock:
+            fresh = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+        return self.send_json({"user": public_user(fresh)})
+
+    def delete_user(self, uid: str):
+        me = self.require(admin=True)
+        if not me:
+            return None
+        if uid == me["id"]:
+            return self.send_json({"error": "self_delete"}, 409)
+        if self.last_admin(uid):
+            return self.send_json({"error": "last_admin"}, 409)
+        with lock:
+            conn.execute("DELETE FROM sessions WHERE user_id=?", (uid,))
+            conn.execute("DELETE FROM users WHERE id=?", (uid,))
+            conn.commit()
+        return self.send_json({"ok": True})
+
+    @staticmethod
+    def last_admin(uid: str) -> bool:
+        with lock:
+            row = conn.execute("SELECT COUNT(*) AS n FROM users WHERE role='admin' AND id<>?", (uid,)).fetchone()
+        return row["n"] == 0
+
+
+def reset_admin(username: str) -> int:
+    """Recuperação: cria ou repõe uma conta de administrador a partir da consola."""
+    import getpass
+
+    if not USERNAME_RE.match(username):
+        print("Nome de utilizador inválido (3 a 32 caracteres: letras, números, . - _).")
+        return 2
+    password = getpass.getpass("Nova palavra-passe: ")
+    if password != getpass.getpass("Repete a palavra-passe: "):
+        print("As palavras-passe não coincidem.")
+        return 2
+    problem = password_problem(password)
+    if problem:
+        print(problem)
+        return 2
+    with lock:
+        row = conn.execute("SELECT * FROM users WHERE username=? COLLATE NOCASE", (username,)).fetchone()
+    if row:
+        with lock:
+            conn.execute("UPDATE users SET role='admin' WHERE id=?", (row["id"],))
+            conn.commit()
+        set_password(row["id"], password)
+        print(f"Conta '{row['username']}' reposta como administrador. As sessões abertas foram fechadas.")
+    else:
+        create_user(username, password, username, "admin")
+        print(f"Conta de administrador '{username}' criada.")
+    return 0
 
 
 def main():
@@ -397,12 +755,11 @@ def main():
     ap.add_argument("--host", default=os.environ.get("ESCALA_HOST") or "127.0.0.1")
     ap.add_argument("--db", default=str(DB_PATH))
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--reset-admin", metavar="UTILIZADOR",
+                    help="cria ou repõe esta conta como administrador e sai (pede a palavra-passe)")
     args = ap.parse_args()
     if os.environ.get("ESCALA_NO_BROWSER"):
         args.no_browser = True
-
-    conn = connect(Path(args.db))
-    init_data()
 
     # Consolas antigas em Windows usam cp1252 e rebentam com acentos.
     for stream in (sys.stdout, sys.stderr):
@@ -410,6 +767,12 @@ def main():
             stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, ValueError):
             pass
+
+    conn = connect(Path(args.db))
+    init_data()
+
+    if args.reset_admin:
+        return reset_admin(args.reset_admin)
 
     url = f"http://{args.host}:{args.port}/"
     httpd = ThreadingHTTPServer((args.host, args.port), Handler)
@@ -428,4 +791,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
