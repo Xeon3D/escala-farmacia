@@ -26,9 +26,19 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+APP_VERSION = "1.3.0"
+
 ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT / "public"
 DB_PATH = Path(os.environ.get("ESCALA_DB") or ROOT / "escala.db")
+
+# Atualizações: o código novo é guardado no volume de dados, ao lado da base de
+# dados, para sobreviver à recriação do contentor.
+APP_DIR = Path(os.environ.get("ESCALA_APP_DIR") or DB_PATH.parent / "app")
+UPDATE_REPO = os.environ.get("ESCALA_UPDATE_REPO", "Xeon3D/escala-farmacia")
+UPDATE_REF = os.environ.get("ESCALA_UPDATE_REF", "main")
+UPDATES_ENABLED = os.environ.get("ESCALA_UPDATES", "1") not in ("0", "false", "off")
+MAX_DOWNLOAD = 20 * 1024 * 1024
 
 ID_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,60}$")
 WEEK_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -163,6 +173,217 @@ def init_data() -> None:
                     (eid, name, role, color, night, weekend, json.dumps(pref), json.dumps(off), mx, json.dumps(fixed), notes),
                 )
         conn.commit()
+
+
+# ---------------------------------------------------------- atualizações
+
+def pointer_path() -> Path:
+    return APP_DIR / "current.json"
+
+
+def read_pointer() -> dict:
+    try:
+        return json.loads(pointer_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def write_pointer(data: dict) -> None:
+    APP_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = pointer_path().with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, pointer_path())
+
+
+def version_of(server_file: Path) -> str:
+    """Lê APP_VERSION de um ficheiro server.py sem o importar."""
+    try:
+        text = server_file.read_text(encoding="utf-8", errors="replace")[:4000]
+    except OSError:
+        return ""
+    m = re.search(r'^APP_VERSION\s*=\s*"([^"]{1,32})"', text, re.M)
+    return m.group(1) if m else ""
+
+
+def installed_dir() -> Path | None:
+    """Pasta da versão instalada no volume, se existir e estiver completa."""
+    name = read_pointer().get("dir")
+    if not name:
+        return None
+    d = APP_DIR / "versions" / name
+    return d if (d / "server.py").is_file() and (d / "public" / "app.html").is_file() else None
+
+
+def fetch(url: str, timeout: int = 30) -> bytes:
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": f"escala-farmacia/{APP_VERSION}"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        data = r.read(MAX_DOWNLOAD + 1)
+    if len(data) > MAX_DOWNLOAD:
+        raise ValueError("ficheiro demasiado grande")
+    return data
+
+
+def latest_version() -> dict:
+    """Versão publicada no repositório, lida do ficheiro VERSION."""
+    base = f"https://raw.githubusercontent.com/{UPDATE_REPO}/{UPDATE_REF}"
+    version = fetch(f"{base}/VERSION", timeout=15).decode("utf-8", "replace").strip()[:32]
+    if not re.fullmatch(r"[0-9A-Za-z.\-_]{1,32}", version or ""):
+        raise ValueError("o repositório não devolveu uma versão válida")
+    return {"version": version, "repo": UPDATE_REPO, "ref": UPDATE_REF}
+
+
+def install_update(ref: str | None = None) -> dict:
+    """Descarrega o código do repositório e instala-o no volume de dados."""
+    import io
+    import tarfile
+
+    ref = ref or UPDATE_REF
+    raw = fetch(f"https://codeload.github.com/{UPDATE_REPO}/tar.gz/{ref}", timeout=60)
+    staging = APP_DIR / "staging"
+    if staging.exists():
+        _rmtree(staging)
+    staging.mkdir(parents=True)
+
+    with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tar:
+        members = []
+        for m in tar.getmembers():
+            if m.issym() or m.islnk() or not (m.isfile() or m.isdir()):
+                continue
+            parts = Path(m.name).parts[1:]  # o tar do GitHub tem uma pasta à cabeça
+            if not parts or ".." in parts:
+                continue
+            rel = "/".join(parts)
+            # Só o servidor e a interface: nada de workflows, Dockerfile ou testes.
+            if not (rel == "server.py" or rel == "VERSION" or rel.startswith("public/")):
+                continue
+            if m.size > 5 * 1024 * 1024:
+                continue
+            m.name = rel
+            members.append(m)
+        tar.extractall(staging, members=members, filter="data")
+
+    new_server = staging / "server.py"
+    if not new_server.is_file() or not (staging / "public" / "app.html").is_file():
+        _rmtree(staging)
+        raise ValueError("o pacote não traz o server.py e o public/app.html")
+    version = version_of(new_server)
+    if not version:
+        _rmtree(staging)
+        raise ValueError("o server.py descarregado não declara a versão")
+    try:
+        compile(new_server.read_text(encoding="utf-8"), "server.py", "exec")
+    except SyntaxError as e:
+        _rmtree(staging)
+        raise ValueError(f"o server.py descarregado tem um erro de sintaxe: {e}") from e
+
+    name = f"{version}-{int(time.time())}"
+    dest = APP_DIR / "versions" / name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        _rmtree(dest)
+    os.replace(staging, dest)
+
+    previous = read_pointer()
+    write_pointer({
+        "dir": name,
+        "version": version,
+        "installedAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "previous": previous.get("dir"),
+        "previousVersion": previous.get("version") or APP_VERSION,
+    })
+    prune_versions()
+    return {"version": version, "dir": name}
+
+
+def rollback_update() -> dict:
+    """Volta à versão anterior; sem versão anterior, volta à que vem na imagem."""
+    p = read_pointer()
+    prev = p.get("previous")
+    if prev and (APP_DIR / "versions" / prev / "server.py").is_file():
+        write_pointer({
+            "dir": prev,
+            "version": version_of(APP_DIR / "versions" / prev / "server.py") or p.get("previousVersion", "?"),
+            "installedAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "previous": None, "previousVersion": None,
+        })
+        return {"version": read_pointer().get("version")}
+    try:
+        pointer_path().unlink()
+    except OSError:
+        pass
+    return {"version": BASE_VERSION}
+
+
+def prune_versions(keep: int = 3) -> None:
+    root = APP_DIR / "versions"
+    if not root.is_dir():
+        return
+    keep_names = {read_pointer().get("dir"), read_pointer().get("previous")}
+    dirs = sorted((d for d in root.iterdir() if d.is_dir()), key=lambda d: d.stat().st_mtime, reverse=True)
+    for d in dirs[keep:]:
+        if d.name not in keep_names:
+            _rmtree(d)
+
+
+def _rmtree(path: Path) -> None:
+    import shutil
+    shutil.rmtree(path, ignore_errors=True)
+
+
+def restart_process(delay: float = 0.8) -> None:
+    """Reinicia o processo (sem recriar o contentor) para correr a versão nova."""
+    def go():
+        time.sleep(delay)
+        try:
+            conn.close()
+        except Exception:  # noqa: BLE001
+            pass
+        os.execv(sys.executable, [sys.executable, BOOT_SCRIPT, *BOOT_ARGS])
+    threading.Thread(target=go, daemon=True).start()
+
+
+# Guarda o ponto de partida para o reinício apontar sempre ao carregador da imagem.
+BOOT_SCRIPT = os.environ.get("ESCALA_BOOT_SCRIPT") or str(Path(__file__).resolve())
+BOOT_ARGS = sys.argv[1:]
+BASE_VERSION = os.environ.get("ESCALA_BASE_VERSION") or APP_VERSION
+
+
+def boot_overlay() -> bool:
+    """Arranca a versão instalada no volume, se houver uma diferente desta."""
+    if not UPDATES_ENABLED or os.environ.get("ESCALA_BOOT_SCRIPT"):
+        return False  # já estamos a correr a versão do volume
+    d = installed_dir()
+    if d is None:
+        return False
+    target = d / "server.py"
+    if target.resolve() == Path(__file__).resolve():
+        return False
+    attempts_file = APP_DIR / "boot_attempts"
+    try:
+        attempts = int(attempts_file.read_text().strip() or 0)
+    except (OSError, ValueError):
+        attempts = 0
+    if attempts >= 3:
+        print(f"A versão instalada ({version_of(target)}) falhou a arrancar {attempts} vezes."
+              f" A usar a versão da imagem ({APP_VERSION}). Usa a reversão na aplicação.")
+        return False
+    try:
+        attempts_file.write_text(str(attempts + 1))
+    except OSError:
+        pass
+    env = dict(os.environ, ESCALA_BOOT_SCRIPT=BOOT_SCRIPT, ESCALA_BASE_VERSION=APP_VERSION)
+    print(f"A arrancar a versão instalada {version_of(target)} a partir de {target}")
+    os.execve(sys.executable, [sys.executable, str(target), *sys.argv[1:]], env)
+    return True  # inalcançável
+
+
+def boot_ok() -> None:
+    """Chamado quando o servidor está de pé: limpa o contador de tentativas."""
+    try:
+        (APP_DIR / "boot_attempts").write_text("0")
+    except OSError:
+        pass
 
 
 # ---------------------------------------------------------- autenticação
@@ -505,7 +726,33 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 return self.send_bytes(b"public/app.html not found", "text/plain; charset=utf-8", 500)
         if path == "/api/health":
-            return self.send_json({"ok": True})
+            return self.send_json({"ok": True, "version": APP_VERSION})
+        if path == "/api/app":
+            if not self.require(admin=False):
+                return None
+            p = read_pointer()
+            return self.send_json({
+                "version": APP_VERSION,
+                "baseVersion": BASE_VERSION,
+                "running": "volume" if os.environ.get("ESCALA_BOOT_SCRIPT") else "imagem",
+                "installedAt": p.get("installedAt"),
+                "previousVersion": p.get("previousVersion") if p.get("previous") else None,
+                "canRollback": bool(p.get("previous")) or bool(p.get("dir")),
+                "updatesEnabled": UPDATES_ENABLED,
+                "repo": UPDATE_REPO, "ref": UPDATE_REF,
+            })
+        if path == "/api/app/check":
+            if not self.require(admin=True):
+                return None
+            if not UPDATES_ENABLED:
+                return self.send_json({"error": "updates_disabled"}, 409)
+            try:
+                info = latest_version()
+            except Exception as e:  # noqa: BLE001 - rede, DNS, GitHub em baixo
+                return self.send_json({"error": "check_failed", "message": str(e)}, 502)
+            info["current"] = APP_VERSION
+            info["upToDate"] = info["version"] == APP_VERSION
+            return self.send_json(info)
         if path == "/api/me":
             user = self.current_user()
             if user is None:
@@ -583,6 +830,24 @@ class Handler(BaseHTTPRequestHandler):
 
         if not self.require(admin=True):
             return None
+        if path == "/api/app/update":
+            if not UPDATES_ENABLED:
+                return self.send_json({"error": "updates_disabled"}, 409)
+            ref = str((data or {}).get("ref") or UPDATE_REF)
+            if not re.fullmatch(r"[0-9A-Za-z./\-_]{1,64}", ref):
+                return self.send_json({"error": "invalid_ref"}, 400)
+            try:
+                result = install_update(ref)
+            except Exception as e:  # noqa: BLE001 - rede ou pacote inválido
+                return self.send_json({"error": "update_failed", "message": str(e)}, 502)
+            print(f"Atualização instalada: {result['version']}. A reiniciar…")
+            restart_process()
+            return self.send_json({"ok": True, **result, "restarting": True})
+        if path == "/api/app/rollback":
+            result = rollback_update()
+            print(f"Reversão para {result['version']}. A reiniciar…")
+            restart_process()
+            return self.send_json({"ok": True, **result, "restarting": True})
         if path == "/api/import":
             if not isinstance(data, dict):
                 return self.send_json({"error": "invalid_json"}, 400)
@@ -768,6 +1033,10 @@ def main():
         except (AttributeError, ValueError):
             pass
 
+    # Se houver uma versão mais recente instalada no volume, é essa que corre.
+    if not args.reset_admin:
+        boot_overlay()
+
     conn = connect(Path(args.db))
     init_data()
 
@@ -776,7 +1045,9 @@ def main():
 
     url = f"http://{args.host}:{args.port}/"
     httpd = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"Escala da Farmácia  ->  {url}")
+    boot_ok()
+    origem = "volume de dados" if os.environ.get("ESCALA_BOOT_SCRIPT") else "imagem"
+    print(f"Escala da Farmácia {APP_VERSION} ({origem})  ->  {url}")
     print(f"Base de dados: {Path(args.db).resolve()}")
     print("Ctrl+C para parar.")
     if not args.no_browser:

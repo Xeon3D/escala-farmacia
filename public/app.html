@@ -557,7 +557,7 @@ const state = {
   month: `${now.getFullYear()}-${pad(now.getMonth() + 1)}`,
   tab: ['horario', 'horas', 'equipa', 'turnos'].includes(savedTab) ? savedTab : 'horario',
   search: '', mode: 'loading', loaded: { e: false, s: false, c: false }, readOnly: false,
-  user: null, setup: false, users: null, gateError: '',
+  user: null, setup: false, users: null, gateError: '', app: null, update: null,
 };
 
 /* ---------- Turnos, plantão ---------- */
@@ -1333,6 +1333,7 @@ function renderSettings() {
       <div class="field-inline"><label for="cfg-minRest">Descanso entre turnos (h)</label><input type="number" id="cfg-minRest" data-cfg="rule" data-k="minRest" value="${+c.minRest || 0}" min="0" max="24" ${ro}><small>Pausa mínima entre dois dias de trabalho</small></div>
     </div>
   </section>
+  ${state.mode === 'api' && state.user?.role === 'admin' ? renderUpdatePanel() : ''}
   <section class="panel data-io">
     <h3>Dados</h3>
     <p>${state.mode === 'api' ? 'Os dados estão na base de dados SQLite do servidor (escala.db). Podes guardar uma cópia ou substituir tudo por uma cópia anterior.' : 'Podes copiar os dados desta página e importá-los noutra instalação.'}</p>
@@ -1343,6 +1344,47 @@ function renderSettings() {
     <textarea id="data-json" spellcheck="false" placeholder="Cola aqui uma cópia em JSON para importar" aria-label="Dados em JSON"></textarea>
   </section>
   <div id="cfg-warn">${cfgWarnHTML(warn)}</div>`;
+}
+
+/* ---------- Atualização da aplicação ---------- */
+function renderUpdatePanel() {
+  const a = state.app;
+  if (!a) { loadApp(); return '<section class="panel"><h3>Versão</h3><p>A ler a versão instalada…</p></section>'; }
+  const upd = state.update;
+  const nova = upd && !upd.error && !upd.upToDate;
+  return `<section class="panel">
+    <h3>Versão da aplicação</h3>
+    <p>Atualiza aqui sem recriar o contentor: a versão nova é descarregada de <code>${esc(a.repo)}</code>, guardada no volume de dados e o servidor reinicia-se sozinho.</p>
+    <dl class="facts" style="grid-template-columns:auto 1fr;max-width:520px;margin-bottom:14px">
+      <dt>Versão a correr</dt><dd><b>${esc(a.version)}</b> <span class="muted">(${esc(a.running)})</span></dd>
+      <dt>Versão da imagem</dt><dd>${esc(a.baseVersion)}</dd>
+      ${a.installedAt ? `<dt>Instalada em</dt><dd>${esc(a.installedAt.replace('T', ' às '))}</dd>` : ''}
+      ${upd && !upd.error ? `<dt>No repositório</dt><dd>${esc(upd.version)}${upd.upToDate ? ' — já estás na versão mais recente' : ' — <b>há uma versão nova</b>'}</dd>` : ''}
+      ${upd && upd.error ? `<dt>Verificação</dt><dd class="lvl-bad">${esc(upd.error)}</dd>` : ''}
+    </dl>
+    <div class="actions">
+      <button class="btn" data-action="app-check" ${a.updatesEnabled ? '' : 'disabled'}>Procurar atualizações</button>
+      <button class="btn ${nova ? 'primary' : ''}" data-action="app-update" ${a.updatesEnabled ? '' : 'disabled'}>Atualizar e reiniciar</button>
+      ${a.canRollback ? `<button class="btn danger" data-action="app-rollback">Reverter${a.previousVersion ? ` para ${esc(a.previousVersion)}` : ' para a versão da imagem'}</button>` : ''}
+    </div>
+    ${a.updatesEnabled ? '' : '<p class="hint">As atualizações estão desligadas nesta instalação (ESCALA_UPDATES=0).</p>'}
+  </section>`;
+}
+async function loadApp() {
+  try { state.app = await store.call('api/app', 'GET'); } catch { state.app = null; return; }
+  if (state.tab === 'turnos') render();
+}
+/** Espera que o servidor volte depois de um reinício. */
+async function waitForServer(maxMs = 60000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    await new Promise(r => setTimeout(r, 1200));
+    try {
+      const r = await fetch('api/health', { cache: 'no-store' });
+      if (r.ok) return (await r.json()).version || '';
+    } catch {}
+  }
+  return null;
 }
 
 /* ---------- Menu de turno ---------- */
@@ -1646,6 +1688,35 @@ document.addEventListener('click', async ev => {
       const w = cfgWarnings(c).list;
       if (w.length) { toast(w[0]); break; }
       store.saveConfig(c); state.cfgDraft = null; state.cfgDirty = false; render(); toast('Turnos e regras guardados.'); break;
+    }
+    case 'app-check': {
+      el.disabled = true; el.textContent = 'A procurar…';
+      try {
+        state.update = await store.call('api/app/check', 'GET');
+        toast(state.update.upToDate ? 'Já estás na versão mais recente.' : `Há a versão ${state.update.version} disponível.`);
+      } catch (e) { state.update = { error: e.message }; toast('Não foi possível verificar: ' + e.message); }
+      render(); break;
+    }
+    case 'app-update': {
+      if (!await confirmBox('Atualizar a aplicação',
+        'A versão nova é descarregada do repositório e o servidor reinicia-se. A base de dados e as contas não são tocadas. Demora alguns segundos.', 'Atualizar')) break;
+      el.disabled = true; el.textContent = 'A instalar…';
+      let r;
+      try { r = await store.call('api/app/update', 'POST', {}); }
+      catch (e) { toast('A atualização falhou: ' + e.message); render(); break; }
+      toast(`Versão ${r.version} instalada. A reiniciar o servidor…`);
+      const v = await waitForServer();
+      if (v === null) { toast('O servidor demorou a voltar. Recarrega a página daqui a pouco.'); break; }
+      location.reload(); break;
+    }
+    case 'app-rollback': {
+      if (!await confirmBox('Reverter a aplicação', 'Volta à versão anterior e reinicia o servidor. Os dados não são tocados.', 'Reverter', true)) break;
+      el.disabled = true; el.textContent = 'A reverter…';
+      try { await store.call('api/app/rollback', 'POST', {}); }
+      catch (e) { toast('Não foi possível reverter: ' + e.message); render(); break; }
+      const v = await waitForServer();
+      if (v === null) { toast('O servidor demorou a voltar. Recarrega a página daqui a pouco.'); break; }
+      location.reload(); break;
     }
     case 'data-export': {
       const data = { config: cfg(), employees: state.employees, schedules: state.schedules };
