@@ -185,8 +185,11 @@ exportação e importação em JSON.
   no banco.
 - **Noite de serviço**: quem faz a noite fica obrigatoriamente de folga no dia seguinte
   (um turno nesse dia aparece como conflito). Se a noite calhar a sábado ou domingo, a
-  pessoa tem uma folga extra na semana seguinte: o mínimo dessa semana baixa um «dia
-  completo» (8 h por omissão) e a geração automática escala-a um dia a menos.
+  pessoa tem direito a uma **folga extra do plantão**, sempre depois da noite e nunca
+  antes: a geração marca-a na semana seguinte, no primeiro dia livre a seguir à folga
+  obrigatória, como célula própria («Folga extra do plantão»; também se marca à mão no
+  menu da célula). Desconta um «dia completo» (8 h por omissão) ao mínimo dessa semana;
+  enquanto não estiver marcada, a semana avisa que está em dívida.
 - **Saldo inicial**: a ficha de cada funcionário tem *Banco de horas já acumulado*, para
   lançares as horas de antes de usares a aplicação. Pode ser negativo.
 - **Descontar horas**: no menu da célula escolhes −2 h, −4 h, −6 h ou um dia inteiro.

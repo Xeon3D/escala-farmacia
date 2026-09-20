@@ -731,6 +731,8 @@ def read_state() -> dict:
                 cell["vac"] = True
             elif r["kind"] == "sick":
                 cell["sick"] = True
+            elif r["kind"] == "xoff":
+                cell["xoff"] = True
             if r["hrs"]:
                 cell["hrs"] = r["hrs"]
             if r["start"]:
@@ -797,7 +799,7 @@ def save_week(week: str, cells: dict) -> None:
                 lunch = str(cell.get("l") or "")[:5]
                 pay = "bank" if cell.get("pay") == "bank" else ""
                 post = "back" if cell.get("post") == "back" else ""
-                kind = "vac" if cell.get("vac") else "sick" if cell.get("sick") else ""
+                kind = "vac" if cell.get("vac") else "sick" if cell.get("sick") else "xoff" if cell.get("xoff") else ""
                 try:
                     bank = max(0.0, min(24.0, float(cell.get("bank") or 0)))
                 except (TypeError, ValueError):
