@@ -75,6 +75,11 @@ O separador **Definições** tem, para administradores, o painel *Versão da apl
    `/data/app/versions/<versão>` e reinicia o processo do servidor dentro do mesmo
    contentor. A base de dados, as contas e as sessões não são tocadas.
 3. **Reverter** — volta à versão anterior (ou à que vem na imagem) e reinicia.
+4. **Verificar automaticamente** — nunca, de 6 em 6 h, de 12 em 12 h, todos os dias,
+   todas as semanas (por omissão) ou todos os meses. O servidor faz a verificação em
+   segundo plano; quando encontra uma versão nova, os administradores veem um aviso no
+   topo da página com o botão **Ver detalhes**, que leva às Definições com a versão e as
+   novidades já à vista.
 
 Como o código fica no volume `/data`, a atualização sobrevive a reinícios do contentor.
 Se uma versão instalada não arrancar três vezes seguidas, o arranque volta sozinho à

@@ -73,7 +73,10 @@ DEFAULT_SETTINGS = {
     "siteTitle": "Escala da Farmácia",
     "siteTagline": "",
     "siteLogo": "",
+    # Verificação automática de novas versões: off, 6h, 12h, 24h, week, month.
+    "updateCheck": "week",
 }
+UPDATE_INTERVALS = {"off": 0, "6h": 6 * 3600, "12h": 12 * 3600, "24h": 86400, "week": 7 * 86400, "month": 30 * 86400}
 LOGO_RE = re.compile(r"^data:image/(png|jpeg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$")
 
 # Equipa de exemplo, criada só quando a base de dados está vazia, para a aplicação
@@ -317,6 +320,61 @@ def latest_version() -> dict:
     except Exception:  # noqa: BLE001 - sem changelog não há drama
         pass
     return {"version": version, "repo": UPDATE_REPO, "ref": UPDATE_REF, "changes": changes}
+
+
+# Estado da verificação automática, guardado nas settings com chave "_" (não vai para o cliente como regra).
+def read_setting(key: str, default=None):
+    with lock:
+        row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    try:
+        return json.loads(row["value"]) if row else default
+    except ValueError:
+        return default
+
+
+def write_setting(key: str, value) -> None:
+    with lock:
+        conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", (key, json.dumps(value)))
+        conn.commit()
+
+
+def auto_check_state() -> dict:
+    st = read_setting("_updateCheck", {}) or {}
+    interval = str(read_setting("updateCheck", DEFAULT_SETTINGS["updateCheck"]) or "off")
+    st["interval"] = interval if interval in UPDATE_INTERVALS else "off"
+    # Uma versão encontrada só é "nova" enquanto for mais recente do que a que está a correr.
+    found = st.get("found")
+    if found and version_key(found.get("version", "")) <= version_key(APP_VERSION):
+        st["found"] = None
+    return st
+
+
+def run_auto_check() -> None:
+    """Procura uma versão nova e guarda o resultado para a interface mostrar."""
+    st = read_setting("_updateCheck", {}) or {}
+    st["lastAt"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    st["lastTs"] = time.time()
+    try:
+        info = latest_version()
+        st["error"] = None
+        st["found"] = info if version_key(info["version"]) > version_key(APP_VERSION) else None
+        if st["found"]:
+            print(f"Verificação automática: há a versão {info['version']} disponível.")
+    except Exception as e:  # noqa: BLE001 - rede ou GitHub em baixo
+        st["error"] = str(e)[:200]
+    write_setting("_updateCheck", st)
+
+
+def auto_check_loop() -> None:
+    while True:
+        try:
+            interval = UPDATE_INTERVALS.get(str(read_setting("updateCheck", "week")), 0)
+            last = float((read_setting("_updateCheck", {}) or {}).get("lastTs") or 0)
+            if interval and time.time() - last >= interval:
+                run_auto_check()
+        except Exception as e:  # noqa: BLE001 - nunca deixar a thread morrer
+            print(f"Verificação automática falhou: {e}")
+        time.sleep(60)
 
 
 def install_update(ref: str | None = None) -> dict:
@@ -596,7 +654,7 @@ def read_state() -> dict:
             }
             for r in conn.execute("SELECT * FROM shifts ORDER BY position, start")
         ]
-        settings = {r["key"]: json.loads(r["value"]) for r in conn.execute("SELECT * FROM settings")}
+        settings = {r["key"]: json.loads(r["value"]) for r in conn.execute("SELECT * FROM settings") if not r["key"].startswith("_")}
         employees = {
             r["id"]: {
                 "name": r["name"], "role": r["role"], "color": r["color"],
@@ -908,6 +966,7 @@ class Handler(BaseHTTPRequestHandler):
                 "updatesEnabled": UPDATES_ENABLED,
                 "repo": UPDATE_REPO, "ref": UPDATE_REF,
                 "changes": [e for e in local_changelog() if e["version"] == APP_VERSION],
+                "autoCheck": auto_check_state(),
             })
         if path == "/api/app/check":
             if not self.require(admin=True):
@@ -920,6 +979,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"error": "check_failed", "message": str(e)}, 502)
             info["current"] = APP_VERSION
             info["upToDate"] = version_key(info["version"]) <= version_key(APP_VERSION)
+            st = read_setting("_updateCheck", {}) or {}
+            st.update({"lastAt": time.strftime("%Y-%m-%dT%H:%M:%S"), "lastTs": time.time(), "error": None,
+                       "found": None if info["upToDate"] else info})
+            write_setting("_updateCheck", st)
             return self.send_json(info)
         if path == "/api/me":
             user = self.current_user()
@@ -1256,6 +1319,8 @@ def main():
     url = f"http://{args.host}:{args.port}/"
     httpd = ThreadingHTTPServer((args.host, args.port), Handler)
     boot_ok()
+    if UPDATES_ENABLED:
+        threading.Thread(target=auto_check_loop, daemon=True, name="auto-check").start()
     origem = "volume de dados" if os.environ.get("ESCALA_BOOT_SCRIPT") else "imagem"
     print(f"Escala da Farmácia {APP_VERSION} ({origem})  ->  {url}")
     print(f"Base de dados: {Path(args.db).resolve()}")

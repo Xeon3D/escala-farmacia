@@ -159,6 +159,7 @@ table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:980px}
 .lunch-pick input[type=number],.lunch-pick input[type=text]{border:1px solid var(--line);background:var(--bg);border-radius:7px;padding:3px 6px;width:72px;font:12px var(--mono)}
 .mini.on{background:var(--accent);color:var(--on-accent)}
 .toggle.muted{opacity:.55}
+.banner.update-note{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
 .changelog{margin:0 0 8px}.changelog ul{margin:4px 0 0;padding-left:18px}.changelog li{margin:2px 0}.facts .muted{color:var(--ink-3)}
 .dot.tone-vac{background:var(--vac-dot)}
 .cell.tone-sick{background:var(--sick-bg);color:var(--sick-ink)}
@@ -407,6 +408,7 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
     </div>
     <span id="whoami"></span>
   </header>
+  <div id="update-note"></div>
   <div id="banner"></div>
   <main id="view"><div class="loading">A carregar a escala…</div></main>
 </div>
@@ -598,7 +600,9 @@ const DEFAULT_CONFIG = {
   presenceBands: [],
   /* Aparência: título, subtítulo e logótipo (data URL) mostrados no cabeçalho. */
   siteTitle: 'Escala da Farmácia', siteTagline: '', siteLogo: '',
+  updateCheck: 'week',
 };
+const UPDATE_CHECK_OPTS = [['off', 'Nunca'], ['6h', 'A cada 6 horas'], ['12h', 'A cada 12 horas'], ['24h', 'Todos os dias'], ['week', 'Todas as semanas'], ['month', 'Todos os meses']];
 /* Códigos da primeira versão (Manhã/Tarde) lidos como os turnos atuais */
 const LEGACY = { M: 's9', T: 's11' };
 const DAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
@@ -780,7 +784,7 @@ const store = {
         this.api = true; state.mode = 'api';
         state.user = me.user; state.setup = !!me.setup;
         window.addEventListener('focus', () => this.refresh());
-        if (state.user) { await this.loadState(); } else { render(); }
+        if (state.user) { await this.loadState(); if (state.user?.role === 'admin') loadApp(); } else { render(); }
         return;
       }
     }
@@ -811,6 +815,7 @@ const store = {
   async refresh() {
     if (!this.api || !state.user || Object.values(writers).some(w => w.busy)) return;
     await this.loadState();
+    if (state.user?.role === 'admin') loadApp();
     if (state.tab === 'utilizadores') loadUsers();
   },
   /** Chamada à API que devolve os dados ou lança um erro com o código do servidor. */
@@ -1269,6 +1274,8 @@ function render() {
   if (state.tab === 'utilizadores' && $('#tab-utilizadores').hidden) state.tab = 'horario';
   document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === state.tab)));
   $('#tab-turnos').innerHTML = 'Turnos' + (state.cfgDirty ? '<span class="badge" title="Alterações por guardar"></span>' : '');
+  const nv = state.tab !== 'definicoes' && state.user?.role === 'admin' ? newVersionFound() : null;
+  $('#update-note').innerHTML = nv ? `<div class="banner update-note"><span>Está disponível a versão <b>${esc(nv.version)}</b> da aplicação (estás na ${esc(state.app?.version || '?')}).</span><button class="btn primary" data-action="tab" data-tab="definicoes">Ver detalhes</button></div>` : '';
   $('#banner').innerHTML = state.readOnly && state.mode === 'api'
     ? '<div class="banner">A tua conta só tem permissão para ver. Pede a um administrador para alterar a escala.</div>'
     : state.readOnly
@@ -1932,6 +1939,8 @@ function renderUpdatePanel() {
       ${upd && !upd.error && !upd.upToDate && upd.changes?.length ? `<dt>Novidades</dt><dd>${changelogHTML(upd.changes)}</dd>` : ''}
       ${(!upd || upd.upToDate) && a.changes?.length ? `<dt>Nesta versão</dt><dd>${changelogHTML(a.changes)}</dd>` : ''}
       ${upd && upd.error ? `<dt>Verificação</dt><dd class="lvl-bad">${esc(upd.error)}</dd>` : ''}
+      ${a.autoCheck?.lastAt ? `<dt>Última verificação</dt><dd>${esc(a.autoCheck.lastAt.replace('T', ' às '))}${a.autoCheck.error ? ` <span class="lvl-bad">— falhou: ${esc(a.autoCheck.error)}</span>` : ''}</dd>` : ''}
+      <dt>Verificar automaticamente</dt><dd><select id="pref-updateCheck" ${a.updatesEnabled ? '' : 'disabled'} style="border:1px solid var(--line);background:var(--bg);border-radius:7px;padding:5px 8px">${UPDATE_CHECK_OPTS.map(([v, l]) => `<option value="${v}" ${(a.autoCheck?.interval || 'off') === v ? 'selected' : ''}>${l}</option>`).join('')}</select><small class="muted" style="display:block;margin-top:4px">Quando encontra uma versão nova, aparece um aviso no topo da página com o botão «Ver detalhes».</small></dd>
     </dl>
     <div class="actions">
       <button class="btn" data-action="app-check" ${a.updatesEnabled ? '' : 'disabled'}>Procurar atualizações</button>
@@ -1943,8 +1952,13 @@ function renderUpdatePanel() {
 }
 async function loadApp() {
   try { state.app = await store.call('api/app', 'GET'); } catch { state.app = null; return; }
-  if (state.tab === 'definicoes') render();
+  /* Se a verificação automática já encontrou uma versão, mostra-a como se tivesses carregado em «Procurar». */
+  const found = state.app.autoCheck?.found;
+  if (found && !state.update) state.update = { ...found, current: state.app.version, upToDate: false, auto: true };
+  render();
 }
+/** Versão nova encontrada (automática ou manualmente) e ainda não instalada. */
+const newVersionFound = () => state.update && !state.update.error && !state.update.upToDate ? state.update : null;
 /** Espera que o servidor volte depois de um reinício. */
 async function waitForServer(maxMs = 60000) {
   const t0 = Date.now();
@@ -2777,6 +2791,12 @@ document.addEventListener('input', ev => {
 });
 document.addEventListener('change', async ev => {
   const t = ev.target;
+  if (t.id === 'pref-updateCheck') {
+    const c = { ...cfg(), updateCheck: t.value };
+    if (state.cfgDraft) state.cfgDraft.updateCheck = t.value;
+    if (await store.send('api/config', 'PUT', c)) { state.config = c; toast(t.value === 'off' ? 'Verificação automática desligada.' : 'Verificação automática guardada.'); loadApp(); }
+    return;
+  }
   if (t.id === 'pref-logo') {
     const file = t.files?.[0]; if (!file) return;
     try {
