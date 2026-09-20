@@ -26,7 +26,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.6.0"
 
 ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT / "public"
@@ -65,6 +65,8 @@ DEFAULT_SETTINGS = {
     "dutyAnchorWeek": "2026-09-14",
     "dutyAnchorDay": 6,
     "dutyStep": 1,
+    # Horário de abertura, de segunda (índice 0) a domingo; "closed" marca o encerramento semanal.
+    "opening": [{"open": "09:00", "close": "20:00", "closed": False} for _ in range(7)],
 }
 
 # Equipa de exemplo, criada só quando a base de dados está vazia, para a aplicação

@@ -160,8 +160,13 @@ exportação e importação em JSON.
   com valor próprio na ficha para quem faz part-time). As horas descontadas do banco
   contam para esse mínimo; quem ficar abaixo aparece nos alertas da semana.
 - **Dia de plantão**: em cada turno desse dia escolhes, no menu da célula, se as horas
-  são **pagas** ou vão para o **banco de horas**. As que vão para o banco entram pelo
-  valor já majorado (a noite de serviço conta 21 h).
+  são **pagas** ou vão para o **banco de horas**. Só as horas normais vão para o banco:
+  as horas entre as 22:00 e as 09:00 são sempre pagas à parte (a dobrar) e nunca entram
+  no banco.
+- **Noite de serviço**: quem faz a noite fica obrigatoriamente de folga no dia seguinte
+  (um turno nesse dia aparece como conflito). Se a noite calhar a sábado ou domingo, a
+  pessoa ganha um dia de folga extra, creditado no banco de horas com o valor do «dia
+  completo» (8 h por omissão), que depois se gasta como folga paga pelo banco.
 - **Saldo inicial**: a ficha de cada funcionário tem *Banco de horas já acumulado*, para
   lançares as horas de antes de usares a aplicação. Pode ser negativo.
 - **Descontar horas**: no menu da célula escolhes −2 h, −4 h, −6 h ou um dia inteiro.
@@ -174,6 +179,19 @@ exportação e importação em JSON.
   *backoffice*. O gráfico de presença e o mínimo ao balcão só contam quem está ao
   balcão; quem está em backoffice aparece numa linha própria e serve de reforço nas
   horas de ponta. Por omissão são 3 ao balcão e 1 em backoffice por dia.
+
+## Horário da farmácia
+
+No separador **Turnos → Horário da farmácia** defines, para cada dia da semana, a hora de
+abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). Efeitos:
+
+- Nos dias fechados a escala não pede turnos de dia nem presença ao balcão, a geração
+  automática não atribui ninguém e um turno marcado à mão aparece com aviso.
+- O gráfico «Ao balcão» e o mínimo de pessoas cobrem só o horário de abertura desse dia.
+- No dia de plantão a farmácia conta sempre como aberta, mesmo que seja o dia de
+  encerramento semanal.
+- A coluna «Cobertura dos turnos» avisa se os turnos definidos deixam parte do horário
+  de abertura sem ninguém.
 
 ## Regras implementadas
 
