@@ -160,6 +160,9 @@ table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:980px}
 .mini.on{background:var(--accent);color:var(--on-accent)}
 .toggle.muted{opacity:.55}
 .banner.update-note{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
+.update-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hide-note{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);cursor:pointer}
+.close-note{border-color:transparent;background:transparent;font-size:14px}
 .changelog{margin:0 0 8px}.changelog ul{margin:4px 0 0;padding-left:18px}.changelog li{margin:2px 0}.facts .muted{color:var(--ink-3)}
 .dot.tone-vac{background:var(--vac-dot)}
 .cell.tone-sick{background:var(--sick-bg);color:var(--sick-ink)}
@@ -1274,8 +1277,13 @@ function render() {
   if (state.tab === 'utilizadores' && $('#tab-utilizadores').hidden) state.tab = 'horario';
   document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === state.tab)));
   $('#tab-turnos').innerHTML = 'Turnos' + (state.cfgDirty ? '<span class="badge" title="Alterações por guardar"></span>' : '');
-  const nv = state.tab !== 'definicoes' && state.user?.role === 'admin' ? newVersionFound() : null;
-  $('#update-note').innerHTML = nv ? `<div class="banner update-note"><span>Está disponível a versão <b>${esc(nv.version)}</b> da aplicação (estás na ${esc(state.app?.version || '?')}).</span><button class="btn primary" data-action="tab" data-tab="definicoes">Ver detalhes</button></div>` : '';
+  let nv = state.tab !== 'definicoes' && state.user?.role === 'admin' ? newVersionFound() : null;
+  /* O × esconde o aviso até recarregar; com a opção marcada, fica escondido para esta versão neste navegador. */
+  if (nv && (state.noteDismissed === nv.version || ls.get('escala.hideUpdate') === nv.version)) nv = null;
+  $('#update-note').innerHTML = nv ? `<div class="banner update-note"><span>Está disponível a versão <b>${esc(nv.version)}</b> da aplicação (estás na ${esc(state.app?.version || '?')}).</span>
+    <span class="update-actions"><button class="btn primary" data-action="tab" data-tab="definicoes">Ver detalhes</button>
+    <label class="hide-note"><input type="checkbox" id="hide-update-version"> Não voltar a mostrar para esta versão</label>
+    <button class="btn icon close-note" data-action="dismiss-update" data-v="${esc(nv.version)}" aria-label="Fechar aviso" title="Fechar">✕</button></span></div>` : '';
   $('#banner').innerHTML = state.readOnly && state.mode === 'api'
     ? '<div class="banner">A tua conta só tem permissão para ver. Pede a um administrador para alterar a escala.</div>'
     : state.readOnly
@@ -2354,6 +2362,12 @@ document.addEventListener('click', async ev => {
       state.employees = {}; state.schedules = {}; state.config = null;
       render(); break;
     case 'my-password': openPw(); break;
+    case 'dismiss-update': {
+      state.noteDismissed = el.dataset.v;
+      if ($('#hide-update-version')?.checked) ls.set('escala.hideUpdate', el.dataset.v);
+      $('#update-note').innerHTML = '';
+      break;
+    }
     case 'user-menu': state.userMenuOpen = !state.userMenuOpen; $('#whoami').innerHTML = userMenuHTML(); break;
     case 'my-avatar': openAvatar(); break;
     case 'close-av': $('#avdlg').close(); break;
