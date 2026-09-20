@@ -4,6 +4,12 @@ Cada versão tem um cabeçalho `## versão — data` e uma lista de pontos. A ap
 aos administradores as entradas mais recentes do que a versão instalada quando procura
 atualizações.
 
+## 1.6.2 — 2026-09-20
+- Horas extra: o que passar do mínimo da semana entra no banco de horas e acumula nas semanas seguintes.
+- Folga extra do plantão marcada como célula própria, sempre depois da noite de fim de semana; aviso enquanto não estiver marcada.
+- Separador Horas: coluna «Horas extra» e relatório dos movimentos do banco de horas ao clicar no valor.
+- Atualização dentro do contentor mais robusta, com aviso quando uma versão instalada não consegue arrancar.
+
 ## 1.6.1 — 2026-09-20
 - Separador Definições: título, subtítulo e logótipo da farmácia; painel de versão e dados passam para lá.
 - Verificação automática de novas versões (de 6 horas a mensal), com aviso no topo da página e as novidades de cada versão.
