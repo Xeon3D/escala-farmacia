@@ -1260,7 +1260,7 @@ function generate(wk) {
     }
   }
   /* Toda a gente (menos os extras) tem de chegar às horas da semana: acrescenta turnos a quem está abaixo,
-     mesmo para lá da cobertura mínima, nos dias em que a farmácia está aberta e sem partir as regras. */
+     mas só em lugares ainda por preencher — o número de pessoas de cada turno é o que se quer, não um mínimo. */
   const dayShifts = sortedShifts().filter(sh => !sh.onlyDuty && !sh.night);
   for (let round = 0; round < 14; round++) {
     let changed = false;
@@ -1278,11 +1278,12 @@ function generate(wk) {
           const h = hoursOf(shiftOn(base, d), '').normal;
           if (!h) continue;
           const have = ids.filter(o => cells[o][d]?.s === base.id).length, need = needFor(base, d, wk);
+          if (have >= need) continue;
           const overMax = count[id] >= (e.maxPerWeek || 5) ? 6 : 0;
           /* Prefere: dias inteiros, dias com menos gente, turnos ainda em falta, turnos preferidos e dentro do máximo. */
           /* Enquanto falta um dia inteiro prefere dias inteiros; perto do fim prefere o que não passe das horas. */
           const fit = falta >= h ? (dayHours() - Math.min(h, dayHours())) * 2 : (h - falta) * 3;
-          const score = fit + gente * 3 + (have < need ? -10 : have)
+          const score = fit + gente * 3 - (need - have)
             + (pref.length ? (pref.includes(base.id) ? -4 : 4) : 0) + overMax + Math.random();
           if (!best || score < best.score) best = { d, sid: base.id, score };
         }
