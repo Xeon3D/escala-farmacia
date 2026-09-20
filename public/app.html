@@ -1448,7 +1448,7 @@ function renderSchedule() {
         tone = toneOf(c.sh) + (isBackoffice(c) ? ' back' : '');
         /* Em cima as horas trabalhadas nesse dia (já sem almoço e horas a menos); por baixo o horário e o almoço. */
         const h = cellHours(c);
-        inner = `<b>${fmtH(h.work)} h</b><span>${c.sh.start}–${c.sh.end}</span>` +
+        inner = `<b>${fmtH(h.normal)} h</b><span>${c.sh.start}–${c.sh.end}</span>` +
           (c.sh.lunch ? `<span class="lu">${c.l ? 'alm. ' + c.l : 'sem almoço'}</span>` : h.dbl ? `<span class="lu">+ ${fmtH(h.dbl)} h nocturnas</span>` : '');
       } else if (c?.vac) {
         tone = 'tone-vac';
