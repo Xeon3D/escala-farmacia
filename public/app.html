@@ -347,12 +347,20 @@ fieldset legend{padding:0;margin-bottom:8px}
 .gate .field input{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 11px;width:100%}
 .gate .btn{justify-content:center}
 .gate .err{margin:0;padding:9px 12px;border-radius:9px;background:var(--bad-bg);color:var(--bad);font-size:13.5px}
-.whoami{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px 5px 3px 11px}
-.whoami b{color:var(--ink);font-weight:600}
+.whoami{position:relative}
+.ubtn{width:38px;height:38px;border-radius:50%;border:2px solid var(--line);background:var(--accent);color:var(--on-accent);font:600 14px var(--sans);display:grid;place-items:center;padding:0;overflow:hidden;cursor:pointer}
+.ubtn:hover,.ubtn[aria-expanded=true]{border-color:var(--accent)}
+.ubtn img{width:100%;height:100%;object-fit:cover;display:block}
+.umenu{position:absolute;right:0;top:calc(100% + 8px);min-width:230px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:6px;z-index:60}
+.umenu .uhead{display:flex;align-items:center;gap:10px;padding:8px 10px 10px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.umenu .uhead b{display:block;color:var(--ink);font-size:14px}.umenu .uhead small{color:var(--ink-3);font-size:12px;white-space:nowrap}
+.umenu button.uitem{display:block;width:100%;text-align:left;border:0;background:transparent;color:var(--ink);padding:8px 10px;border-radius:8px;font-size:13.5px;cursor:pointer}
+.umenu button.uitem:hover{background:var(--surface-2)}
+.umenu .ubig{width:40px;height:40px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font:600 14px var(--sans);overflow:hidden;flex:none}.umenu .ubig img{width:100%;height:100%;object-fit:cover}
+.avatar-prev{width:96px;height:96px;border-radius:50%;object-fit:cover;background:var(--surface-2);border:1px solid var(--line);display:grid;place-items:center;font:600 28px var(--sans);color:var(--on-accent);overflow:hidden}.avatar-prev img{width:100%;height:100%;object-fit:cover}
 .whoami .role{font:10.5px var(--mono);text-transform:uppercase;letter-spacing:.05em;padding:1px 6px;border-radius:5px;background:var(--surface-2);color:var(--ink-2)}
 .whoami .role.admin{background:var(--accent-soft);color:var(--accent)}
-.whoami button{border:0;background:transparent;color:var(--ink-2);padding:3px 7px;border-radius:999px;font-size:12.5px}
-.whoami button:hover{background:var(--surface-2);color:var(--ink)}
+
 table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px}
 .users th,.users td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
 .users thead th{font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
@@ -385,7 +393,6 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
     </div>
     <div class="top-right">
       <span class="status" id="status"><i></i><span>A ligar…</span></span>
-      <span id="whoami"></span>
       <nav class="tabs" role="tablist" aria-label="Secções" id="tabs">
         <button class="tab" role="tab" id="tab-horario" data-action="tab" data-tab="horario" aria-selected="true">Horário</button>
         <button class="tab" role="tab" id="tab-horas" data-action="tab" data-tab="horas" aria-selected="false">Horas</button>
@@ -394,6 +401,7 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
         <button class="tab" role="tab" id="tab-utilizadores" data-action="tab" data-tab="utilizadores" aria-selected="false" hidden>Utilizadores</button>
         <button class="tab" role="tab" id="tab-definicoes" data-action="tab" data-tab="definicoes" aria-selected="false">Definições</button>
       </nav>
+      <span id="whoami"></span>
     </div>
   </header>
   <div id="banner"></div>
@@ -521,6 +529,31 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
   </form>
 </dialog>
 
+<dialog id="avdlg">
+  <form class="dlg" id="av-form" method="dialog">
+    <header><h2>Imagem de perfil</h2></header>
+    <div class="body">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <span class="avatar-prev" id="av-prev"></span>
+        <span style="display:flex;flex-direction:column;gap:8px">
+          <label class="btn" style="cursor:pointer;text-align:center">Escolher ficheiro<input type="file" id="av-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></label>
+          <button type="button" class="btn" id="av-clear" data-action="av-clear">Usar as iniciais</button>
+        </span>
+      </div>
+      <div class="field"><label for="av-url">Ou a partir de um endereço</label>
+        <div style="display:flex;gap:8px"><input type="url" id="av-url" placeholder="https://…/foto.jpg" autocomplete="off" style="flex:1"><button type="button" class="btn" data-action="av-fetch">Ir buscar</button></div>
+        <p class="hint">A imagem é recortada ao centro e reduzida para 96 px, como a foto de perfil do Gmail.</p>
+      </div>
+      <div id="av-warn"></div>
+    </div>
+    <footer>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-action="close-av">Cancelar</button>
+      <button type="submit" class="btn primary">Guardar</button>
+    </footer>
+  </form>
+</dialog>
+
 <dialog id="pwdlg">
   <form class="dlg" id="pw-form" method="dialog">
     <header><h2>Mudar a minha palavra-passe</h2></header>
@@ -561,7 +594,7 @@ const DEFAULT_CONFIG = {
   /* Períodos do dia em que o mínimo ao balcão é outro (ex.: 12:00–16:00 chegam 2 pessoas). */
   presenceBands: [],
   /* Aparência: título, subtítulo e logótipo (data URL) mostrados no cabeçalho. */
-  siteTitle: 'Escala da Farmácia', siteTagline: 'Turnos, plantão, almoços e horas da equipa', siteLogo: '',
+  siteTitle: 'Escala da Farmácia', siteTagline: '', siteLogo: '',
 };
 /* Códigos da primeira versão (Manhã/Tarde) lidos como os turnos atuais */
 const LEGACY = { M: 's9', T: 's11' };
@@ -641,7 +674,7 @@ const state = {
   month: `${now.getFullYear()}-${pad(now.getMonth() + 1)}`,
   tab: ['horario', 'horas', 'equipa', 'turnos', 'definicoes'].includes(savedTab) ? savedTab : 'horario',
   search: '', mode: 'loading', loaded: { e: false, s: false, c: false }, readOnly: false,
-  user: null, setup: false, users: null, gateError: '', app: null, update: null,
+  user: null, setup: false, users: null, gateError: '', app: null, update: null, phrase: '',
 };
 
 /* ---------- Turnos, plantão ---------- */
@@ -727,6 +760,8 @@ function hoursOf(sh, lunchStr) {
 /* ---------- Armazenamento ---------- */
 const LOCAL_KEY = 'escala-farmacia.v1';
 const HTTP = /^https?:$/.test(location.protocol);
+/* Frase do dia (public/frases.txt), mostrada debaixo do título quando não há subtítulo fixo. */
+if (HTTP) fetch('api/frase').then(r => r.ok ? r.json() : null).then(j => { if (j?.text) { state.phrase = j.text; applyBranding(); } }).catch(() => {});
 const writers = {};
 
 const store = {
@@ -1190,13 +1225,29 @@ function generate(wk) {
 function applyBranding() {
   const C = cfg(), title = String(C.siteTitle || '').trim() || DEFAULT_CONFIG.siteTitle;
   $('#brand-title').textContent = title;
-  $('#brand-tagline').textContent = String(C.siteTagline || '').trim();
-  $('#brand-tagline').hidden = !String(C.siteTagline || '').trim();
+  /* Subtítulo fixo, se estiver definido; senão a frase do dia. */
+  const tagline = String(C.siteTagline || '').trim() || state.phrase || '';
+  $('#brand-tagline').textContent = tagline;
+  $('#brand-tagline').hidden = !tagline;
   document.title = title;
   const logo = typeof C.siteLogo === 'string' && /^data:image\/(png|jpeg|webp|gif|svg\+xml);base64,/.test(C.siteLogo) ? C.siteLogo : '';
   const holder = $('#brand-logo');
   if (logo) { if (holder.dataset.src !== logo) { holder.innerHTML = `<img src="${logo}" alt="">`; holder.dataset.src = logo; } }
   else if (holder.dataset.src) { holder.innerHTML = '<svg class="cross" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="var(--accent)"/><path d="M16 8h8v8h8v8h-8v8h-8v-8H8v-8h8z" fill="var(--on-accent)"/></svg>'; delete holder.dataset.src; }
+}
+/** Imagem de perfil (ou iniciais) do utilizador com sessão. */
+const avatarInner = (u, cls) => u.avatar ? `<img src="${esc(u.avatar)}" alt="">` : esc(initials(u.name || u.username));
+function userMenuHTML() {
+  const u = state.user, open = !!state.userMenuOpen;
+  return `<span class="whoami">
+    <button class="ubtn" data-action="user-menu" aria-haspopup="menu" aria-expanded="${open}" title="${esc(u.name || u.username)}">${avatarInner(u)}</button>
+    ${open ? `<div class="umenu" role="menu">
+      <div class="uhead"><span class="ubig">${avatarInner(u)}</span><span><b>${esc(u.name || u.username)}</b><small>@${esc(u.username)} · <span class="role ${u.role}">${u.role === 'admin' ? 'administrador' : 'ver apenas'}</span></small></span></div>
+      <button class="uitem" role="menuitem" data-action="my-avatar">Imagem de perfil</button>
+      <button class="uitem" role="menuitem" data-action="my-password">Mudar a palavra-passe</button>
+      <button class="uitem" role="menuitem" data-action="logout">Sair</button>
+    </div>` : ''}
+  </span>`;
 }
 function render() {
   closeMenu();
@@ -1209,7 +1260,7 @@ function render() {
   /* Sem sessão: só o ecrã de entrada */
   const gated = state.mode === 'api' && !state.user;
   $('#tabs').hidden = gated;
-  $('#whoami').innerHTML = state.user ? `<span class="whoami"><b>${esc(state.user.name || state.user.username)}</b><span class="role ${state.user.role}">${state.user.role === 'admin' ? 'admin' : 'ver'}</span><button data-action="my-password" title="Mudar a minha palavra-passe">Palavra-passe</button><button data-action="logout">Sair</button></span>` : '';
+  $('#whoami').innerHTML = state.user ? userMenuHTML() : '';
   if (gated) { $('#banner').innerHTML = ''; $('#view').innerHTML = state.setup ? renderSetup() : renderLogin(); return; }
   $('#tab-utilizadores').hidden = !(state.mode === 'api' && state.user?.role === 'admin');
   if (state.tab === 'utilizadores' && $('#tab-utilizadores').hidden) state.tab = 'horario';
@@ -1804,10 +1855,10 @@ function renderPrefs() {
   </div>
   <section class="panel">
     <h3>Aparência</h3>
-    <p>O título e o logótipo aparecem no cabeçalho e no separador do navegador.</p>
+    <p>O título e o logótipo aparecem no cabeçalho e no separador do navegador. Sem subtítulo, o cabeçalho mostra uma frase do dia tirada de <code>public/frases.txt</code> (uma por linha; muda à meia-noite).</p>
     <div class="prefs-form">
       <div class="field-inline"><label for="pref-siteTitle">Título</label><input type="text" id="pref-siteTitle" data-pref="siteTitle" value="${esc(p.siteTitle)}" maxlength="60" placeholder="${esc(DEFAULT_CONFIG.siteTitle)}" ${ro}></div>
-      <div class="field-inline"><label for="pref-siteTagline">Subtítulo</label><input type="text" id="pref-siteTagline" data-pref="siteTagline" value="${esc(p.siteTagline)}" maxlength="100" placeholder="Em branco esconde o subtítulo" ${ro}></div>
+      <div class="field-inline"><label for="pref-siteTagline">Subtítulo</label><input type="text" id="pref-siteTagline" data-pref="siteTagline" value="${esc(p.siteTagline)}" maxlength="100" placeholder="Em branco mostra a frase do dia" ${ro}></div>
       <div class="field-inline" style="grid-column:1/-1">
         <label for="pref-logo">Logótipo</label>
         <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
@@ -2273,8 +2324,10 @@ const shiftMonth = (key, n) => { const [y, m] = key.split('-').map(Number); cons
 
 document.addEventListener('click', async ev => {
   const el = ev.target.closest('[data-action]');
+  if (state.userMenuOpen && !ev.target.closest('.whoami')) { state.userMenuOpen = false; if (state.user) $('#whoami').innerHTML = userMenuHTML(); }
   if (!el) { if (!ev.target.closest('#menu')) closeMenu(); return; }
   const a = el.dataset.action;
+  if (['my-avatar', 'my-password', 'logout'].includes(a)) state.userMenuOpen = false;
   if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation', 'sick', 'less', 'extra-hours'].includes(a)) closeMenu();
   switch (a) {
     case 'tab': state.tab = el.dataset.tab; ls.set('escala.tab', state.tab); render(); window.scrollTo(0, 0); break;
@@ -2284,6 +2337,21 @@ document.addEventListener('click', async ev => {
       state.employees = {}; state.schedules = {}; state.config = null;
       render(); break;
     case 'my-password': openPw(); break;
+    case 'user-menu': state.userMenuOpen = !state.userMenuOpen; $('#whoami').innerHTML = userMenuHTML(); break;
+    case 'my-avatar': openAvatar(); break;
+    case 'close-av': $('#avdlg').close(); break;
+    case 'av-clear': avDraft = ''; avPreview(); break;
+    case 'av-fetch': {
+      const url = $('#av-url').value.trim();
+      if (!/^https?:\/\//i.test(url)) { $('#av-warn').innerHTML = '<div class="form-warn">Indica um endereço que comece por http:// ou https://.</div>'; break; }
+      el.disabled = true;
+      try {
+        const r = await store.call('api/avatar/fetch', 'POST', { url });
+        avDraft = await squareImage(r.data); $('#av-warn').innerHTML = ''; avPreview();
+      } catch (e) { $('#av-warn').innerHTML = `<div class="form-warn">${esc(e.message || 'Não foi possível ir buscar a imagem.')}</div>`; }
+      el.disabled = false;
+      break;
+    }
     case 'close-pw': $('#pwdlg').close(); break;
     case 'close-vac': $('#vacdlg').close(); break;
     case 'close-user': $('#userdlg').close(); break;
@@ -2614,6 +2682,49 @@ function openVacation(id) {
   $('#vacdlg').showModal();
   $('#vac-from').focus();
 }
+/* ---------- Imagem de perfil ---------- */
+let avDraft = null; // data URL, '' para remover, null sem alteração
+function avPreview() {
+  const u = state.user, src = avDraft === null ? (u.avatar || '') : avDraft;
+  $('#av-prev').innerHTML = src ? `<img src="${esc(src)}" alt="">` : esc(initials(u.name || u.username));
+  $('#av-prev').style.background = src ? '' : 'var(--accent)';
+  $('#av-clear').hidden = !src;
+}
+/** Recorta ao centro e reduz para um PNG quadrado de 96 px. */
+function squareImage(url, size = 96) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onerror = () => reject(new Error('A imagem não é válida.'));
+    img.onload = () => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = size;
+      const ctx = cv.getContext('2d'), side = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+      const out = cv.toDataURL('image/png');
+      if (out.length > 150 * 1024) { const jpg = cv.toDataURL('image/jpeg', 0.85); return resolve(jpg); }
+      resolve(out);
+    };
+    img.src = url;
+  });
+}
+function openAvatar() {
+  avDraft = null; $('#av-url').value = ''; $('#av-file').value = ''; $('#av-warn').innerHTML = '';
+  avPreview(); $('#avdlg').showModal();
+}
+$('#av-file').addEventListener('change', async ev => {
+  const file = ev.target.files?.[0]; if (!file) return;
+  if (file.size > 6 * 1024 * 1024) { $('#av-warn').innerHTML = '<div class="form-warn">A imagem é demasiado grande (máximo 6 MB).</div>'; return; }
+  const fr = new FileReader();
+  fr.onload = async () => { try { avDraft = await squareImage(String(fr.result)); $('#av-warn').innerHTML = ''; avPreview(); } catch (e) { $('#av-warn').innerHTML = `<div class="form-warn">${esc(e.message)}</div>`; } };
+  fr.readAsDataURL(file);
+});
+$('#av-form').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  if (avDraft === null) { $('#avdlg').close(); return; }
+  try {
+    const r = await store.call('api/avatar', 'POST', { avatar: avDraft });
+    state.user = r.user; $('#avdlg').close(); render(); toast(avDraft ? 'Imagem de perfil atualizada.' : 'Imagem de perfil removida.');
+  } catch (e) { $('#av-warn').innerHTML = `<div class="form-warn">${esc(e.message)}</div>`; }
+});
 function openPw() {
   $('#pw-form').reset(); $('#pw-warn').innerHTML = '';
   $('#pwdlg').showModal(); $('#pw-current').focus();

@@ -71,7 +71,7 @@ DEFAULT_SETTINGS = {
     "presenceBands": [],
     # Aparência: título, subtítulo e logótipo (data URL de imagem, até ~200 KB).
     "siteTitle": "Escala da Farmácia",
-    "siteTagline": "Turnos, plantão, almoços e horas da equipa",
+    "siteTagline": "",
     "siteLogo": "",
 }
 LOGO_RE = re.compile(r"^data:image/(png|jpeg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$")
@@ -147,7 +147,8 @@ CREATE TABLE IF NOT EXISTS users (
   role       TEXT NOT NULL DEFAULT 'viewer',
   pw_salt    TEXT NOT NULL,
   pw_hash    TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  avatar     TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
@@ -185,6 +186,7 @@ def migrate() -> None:
                         "post": "TEXT NOT NULL DEFAULT ''", "kind": "TEXT NOT NULL DEFAULT ''",
                         "hrs": "REAL NOT NULL DEFAULT 0", "start": "TEXT NOT NULL DEFAULT ''",
                         "less": "REAL NOT NULL DEFAULT 0"},
+        "users": {"avatar": "TEXT NOT NULL DEFAULT ''"},
     }
     with lock:
         for table, columns in additions.items():
@@ -492,8 +494,10 @@ def user_count() -> int:
 
 
 def public_user(row) -> dict:
+    keys = row.keys()
     return {"id": row["id"], "username": row["username"], "name": row["name"],
-            "role": row["role"], "createdAt": row["created_at"]}
+            "role": row["role"], "createdAt": row["created_at"],
+            "avatar": row["avatar"] if "avatar" in keys else ""}
 
 
 def create_user(username: str, password: str, name: str, role: str) -> dict:
@@ -778,6 +782,21 @@ img{max-width:100%}
 """
 
 
+def daily_phrase() -> str:
+    """Frase do dia, lida de public/frases.txt: a mesma durante todo o dia, muda à meia-noite."""
+    try:
+        lines = [ln.strip() for ln in (PUBLIC / "frases.txt").read_text(encoding="utf-8").splitlines()]
+    except OSError:
+        return ""
+    frases = [ln for ln in lines if ln and not ln.startswith("#")]
+    if not frases:
+        return ""
+    day = int(time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1)) // 86400)
+    # Baralha de forma estável para não seguir a ordem do ficheiro.
+    idx = int(hashlib.sha256(str(day).encode()).hexdigest(), 16) % len(frases)
+    return frases[idx][:200]
+
+
 def site_title() -> str:
     try:
         with lock:
@@ -873,6 +892,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_bytes(b"public/app.html not found", "text/plain; charset=utf-8", 500)
         if path == "/api/health":
             return self.send_json({"ok": True, "version": APP_VERSION})
+        if path == "/api/frase":
+            return self.send_json({"text": daily_phrase()})
         if path == "/api/app":
             if not self.require(admin=False):
                 return None
@@ -972,6 +993,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": True}, cookie=self.cookie_header(None))
         if path == "/api/password":
             return self.change_own_password(data)
+        if path == "/api/avatar":
+            return self.set_avatar(data)
+        if path == "/api/avatar/fetch":
+            return self.fetch_avatar(data)
         if path == "/api/users":
             return self.add_user(data)
 
@@ -1059,6 +1084,44 @@ class Handler(BaseHTTPRequestHandler):
         set_password(user["id"], (data or {})["password"])
         token = open_session(user["id"])  # a sessão atual é renovada
         return self.send_json({"ok": True}, cookie=self.cookie_header(token))
+
+    def set_avatar(self, data):
+        """Guarda (ou remove, com string vazia) a imagem de perfil do próprio utilizador."""
+        user = self.require(admin=False)
+        if not user:
+            return None
+        avatar = (data or {}).get("avatar", "")
+        if not isinstance(avatar, str) or len(avatar) > 300_000 or (avatar and not LOGO_RE.match(avatar)):
+            return self.send_json({"error": "invalid_image", "message": "A imagem não é válida ou é demasiado grande."}, 400)
+        with lock:
+            conn.execute("UPDATE users SET avatar=? WHERE id=?", (avatar, user["id"]))
+            conn.commit()
+            fresh = conn.execute("SELECT * FROM users WHERE id=?", (user["id"],)).fetchone()
+        return self.send_json({"user": public_user(fresh)})
+
+    def fetch_avatar(self, data):
+        """Vai buscar uma imagem a um endereço e devolve-a como data URL, para o navegador a recortar."""
+        import base64
+        import urllib.parse
+        if not self.require(admin=False):
+            return None
+        url = str((data or {}).get("url", "")).strip()[:2000]
+        parts = urllib.parse.urlsplit(url)
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            return self.send_json({"error": "invalid_url", "message": "Indica um endereço http:// ou https://."}, 400)
+        try:
+            import urllib.request
+            req = urllib.request.Request(url, headers={"User-Agent": f"escala-farmacia/{APP_VERSION}", "Accept": "image/*"})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                ctype = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                raw = r.read(6 * 1024 * 1024 + 1)
+        except Exception as e:  # noqa: BLE001 - rede, DNS, 404…
+            return self.send_json({"error": "fetch_failed", "message": f"Não foi possível ir buscar a imagem ({e})."}, 502)
+        if len(raw) > 6 * 1024 * 1024:
+            return self.send_json({"error": "too_large", "message": "A imagem é demasiado grande (máximo 6 MB)."}, 400)
+        if ctype not in ("image/png", "image/jpeg", "image/webp", "image/gif"):
+            return self.send_json({"error": "not_image", "message": "O endereço não devolveu uma imagem PNG, JPG, WebP ou GIF."}, 400)
+        return self.send_json({"data": f"data:{ctype};base64,{base64.b64encode(raw).decode()}"})
 
     def add_user(self, data):
         if not self.require(admin=True):

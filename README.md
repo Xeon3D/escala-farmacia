@@ -32,8 +32,9 @@ administrador. Não há contas nem palavras-passe predefinidas.
 
 O separador **Utilizadores** (só para administradores) cria contas, muda o papel,
 define palavras-passe e apaga contas. Tem de ficar sempre pelo menos um administrador,
-e ninguém apaga a própria conta. Qualquer pessoa muda a sua palavra-passe no botão
-*Palavra-passe*, ao lado do nome.
+e ninguém apaga a própria conta. O ícone no canto superior direito abre o menu da conta:
+**Imagem de perfil** (a partir de um ficheiro ou de um endereço; a imagem é recortada ao
+centro e reduzida para 96 px), **Mudar a palavra-passe** e **Sair**.
 
 Detalhes: as palavras-passe são guardadas com PBKDF2-SHA256 (240 000 iterações e sal
 por conta); a sessão é um cookie `HttpOnly` com validade de 30 dias, guardado na base de
@@ -59,7 +60,8 @@ O separador **Definições** junta o que diz respeito à instalação e não à 
 
 - **Aparência**: título, subtítulo e logótipo mostrados no cabeçalho e no separador do
   navegador. O logótipo (PNG, JPG, WebP ou SVG) é reduzido para 128 px e fica guardado na
-  base de dados.
+  base de dados. Sem subtítulo, o cabeçalho mostra a **frase do dia**, tirada de
+  `public/frases.txt` (uma frase por linha, linhas com `#` são ignoradas; muda à meia-noite).
 - **Versão da aplicação** (administradores): ver abaixo.
 - **Dados**: exportar e importar uma cópia em JSON.
 
