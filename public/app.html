@@ -71,6 +71,9 @@ button:disabled{cursor:not-allowed;opacity:.55}
 .top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;padding-bottom:18px;border-bottom:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:12px}
 .cross{width:40px;height:40px;flex:none}
+#brand-logo{display:flex;flex:none}#brand-logo img{width:40px;height:40px;object-fit:contain;border-radius:10px}
+.logo-preview{width:64px;height:64px;object-fit:contain;border-radius:12px;background:var(--surface-2);border:1px solid var(--line)}
+.prefs-form{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;max-width:760px}
 .brand h1{margin:0;font:700 26px/1.1 var(--display);letter-spacing:-.01em;text-wrap:balance}
 .brand p{margin:2px 0 0;color:var(--ink-2);font-size:13px}
 .status{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
@@ -374,10 +377,10 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
 <div class="wrap" lang="pt-PT">
   <header class="top">
     <div class="brand">
-      <svg class="cross" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="var(--accent)"/><path d="M16 8h8v8h8v8h-8v8h-8v-8H8v-8h8z" fill="var(--on-accent)"/></svg>
+      <span id="brand-logo"><svg class="cross" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="var(--accent)"/><path d="M16 8h8v8h8v8h-8v8h-8v-8H8v-8h8z" fill="var(--on-accent)"/></svg></span>
       <div>
-        <h1>Escala da Farmácia</h1>
-        <p>Turnos, plantão, almoços e horas da equipa</p>
+        <h1 id="brand-title">Escala da Farmácia</h1>
+        <p id="brand-tagline">Turnos, plantão, almoços e horas da equipa</p>
       </div>
     </div>
     <div class="top-right">
@@ -389,6 +392,7 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
         <button class="tab" role="tab" id="tab-equipa" data-action="tab" data-tab="equipa" aria-selected="false">Equipa</button>
         <button class="tab" role="tab" id="tab-turnos" data-action="tab" data-tab="turnos" aria-selected="false">Turnos</button>
         <button class="tab" role="tab" id="tab-utilizadores" data-action="tab" data-tab="utilizadores" aria-selected="false" hidden>Utilizadores</button>
+        <button class="tab" role="tab" id="tab-definicoes" data-action="tab" data-tab="definicoes" aria-selected="false">Definições</button>
       </nav>
     </div>
   </header>
@@ -556,6 +560,8 @@ const DEFAULT_CONFIG = {
   opening: [...Array(7)].map(() => ({ open: '09:00', close: '20:00', closed: false })),
   /* Períodos do dia em que o mínimo ao balcão é outro (ex.: 12:00–16:00 chegam 2 pessoas). */
   presenceBands: [],
+  /* Aparência: título, subtítulo e logótipo (data URL) mostrados no cabeçalho. */
+  siteTitle: 'Escala da Farmácia', siteTagline: 'Turnos, plantão, almoços e horas da equipa', siteLogo: '',
 };
 /* Códigos da primeira versão (Manhã/Tarde) lidos como os turnos atuais */
 const LEGACY = { M: 's9', T: 's11' };
@@ -633,7 +639,7 @@ const state = {
   employees: {}, schedules: {}, config: null, cfgDraft: null, cfgDirty: false,
   week: iso(mondayOf(now)),
   month: `${now.getFullYear()}-${pad(now.getMonth() + 1)}`,
-  tab: ['horario', 'horas', 'equipa', 'turnos'].includes(savedTab) ? savedTab : 'horario',
+  tab: ['horario', 'horas', 'equipa', 'turnos', 'definicoes'].includes(savedTab) ? savedTab : 'horario',
   search: '', mode: 'loading', loaded: { e: false, s: false, c: false }, readOnly: false,
   user: null, setup: false, users: null, gateError: '', app: null, update: null,
 };
@@ -1180,8 +1186,21 @@ function generate(wk) {
 }
 
 /* ---------- Render ---------- */
+/** Título, subtítulo e logótipo definidos em Definições. */
+function applyBranding() {
+  const C = cfg(), title = String(C.siteTitle || '').trim() || DEFAULT_CONFIG.siteTitle;
+  $('#brand-title').textContent = title;
+  $('#brand-tagline').textContent = String(C.siteTagline || '').trim();
+  $('#brand-tagline').hidden = !String(C.siteTagline || '').trim();
+  document.title = title;
+  const logo = typeof C.siteLogo === 'string' && /^data:image\/(png|jpeg|webp|gif|svg\+xml);base64,/.test(C.siteLogo) ? C.siteLogo : '';
+  const holder = $('#brand-logo');
+  if (logo) { if (holder.dataset.src !== logo) { holder.innerHTML = `<img src="${logo}" alt="">`; holder.dataset.src = logo; } }
+  else if (holder.dataset.src) { holder.innerHTML = '<svg class="cross" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="var(--accent)"/><path d="M16 8h8v8h8v8h-8v8h-8v-8H8v-8h8z" fill="var(--on-accent)"/></svg>'; delete holder.dataset.src; }
+}
 function render() {
   closeMenu();
+  applyBranding();
   const st = $('#status');
   st.className = 'status' + (state.mode === 'api' || state.mode === 'db' ? ' live' : '');
   st.lastElementChild.textContent = state.mode === 'api' ? 'Base de dados SQLite'
@@ -1206,8 +1225,9 @@ function render() {
   $('#view').innerHTML = state.tab === 'horario' ? renderSchedule()
     : state.tab === 'horas' ? renderHours()
     : state.tab === 'equipa' ? renderTeam()
-    : state.tab === 'utilizadores' ? renderUsers() : renderSettings();
-  if (focusId && focusId.startsWith('cfg-')) { const f = document.getElementById(focusId); if (f) f.focus(); }
+    : state.tab === 'utilizadores' ? renderUsers()
+    : state.tab === 'definicoes' ? renderPrefs() : renderSettings();
+  if (focusId && (focusId.startsWith('cfg-') || focusId.startsWith('pref-'))) { const f = document.getElementById(focusId); if (f) f.focus(); }
 }
 
 /* ---------- Entrada e contas ---------- */
@@ -1765,7 +1785,43 @@ function renderSettings() {
       <div class="field-inline"><label for="cfg-minRest">Descanso entre turnos (h)</label><input type="number" id="cfg-minRest" data-cfg="rule" data-k="minRest" value="${+c.minRest || 0}" min="0" max="24" ${ro}><small>Pausa mínima entre dois dias de trabalho</small></div>
     </div>
   </section>
-  ${state.mode === 'api' && state.user?.role === 'admin' ? renderUpdatePanel() : ''}
+  <div id="cfg-warn">${cfgWarnHTML(warn)}</div>`;
+}
+
+/* ---------- Definições (aparência, versão, dados) ---------- */
+function renderPrefs() {
+  const C = cfg(), ro = state.readOnly ? 'disabled' : '', admin = !state.readOnly;
+  const p = state.prefsDraft || { siteTitle: C.siteTitle || '', siteTagline: C.siteTagline || '', siteLogo: C.siteLogo || '' };
+  const logo = /^data:image\//.test(p.siteLogo || '') ? p.siteLogo : '';
+  return `
+  <div class="team-head">
+    <h2>Definições</h2>
+    <div class="actions">
+      ${state.prefsDraft ? '<span class="dirty-note">Alterações por guardar</span>' : ''}
+      <button class="btn" data-action="pref-discard" ${state.prefsDraft ? '' : 'disabled'}>Descartar</button>
+      <button class="btn primary" data-action="pref-save" ${ro || !state.prefsDraft ? 'disabled' : ''}>Guardar alterações</button>
+    </div>
+  </div>
+  <section class="panel">
+    <h3>Aparência</h3>
+    <p>O título e o logótipo aparecem no cabeçalho e no separador do navegador.</p>
+    <div class="prefs-form">
+      <div class="field-inline"><label for="pref-siteTitle">Título</label><input type="text" id="pref-siteTitle" data-pref="siteTitle" value="${esc(p.siteTitle)}" maxlength="60" placeholder="${esc(DEFAULT_CONFIG.siteTitle)}" ${ro}></div>
+      <div class="field-inline"><label for="pref-siteTagline">Subtítulo</label><input type="text" id="pref-siteTagline" data-pref="siteTagline" value="${esc(p.siteTagline)}" maxlength="100" placeholder="Em branco esconde o subtítulo" ${ro}></div>
+      <div class="field-inline" style="grid-column:1/-1">
+        <label for="pref-logo">Logótipo</label>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          ${logo ? `<img class="logo-preview" src="${logo}" alt="Logótipo atual">` : '<svg class="cross" style="width:64px;height:64px" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="var(--accent)"/><path d="M16 8h8v8h8v8h-8v8h-8v-8H8v-8h8z" fill="var(--on-accent)"/></svg>'}
+          <span style="display:flex;gap:8px;flex-wrap:wrap">
+            <label class="btn" style="cursor:pointer;text-transform:none;letter-spacing:0;font-size:inherit;color:inherit">Escolher imagem<input type="file" id="pref-logo" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" hidden ${ro}></label>
+            ${logo ? `<button class="btn" data-action="pref-logo-clear" ${ro}>Usar o símbolo original</button>` : ''}
+          </span>
+        </div>
+        <small>PNG, JPG, WebP ou SVG, de preferência quadrado. A imagem é reduzida para 128 px e guardada na base de dados.</small>
+      </div>
+    </div>
+  </section>
+  ${state.mode === 'api' && admin ? renderUpdatePanel() : ''}
   <section class="panel data-io">
     <h3>Dados</h3>
     <p>${state.mode === 'api' ? 'Os dados estão na base de dados SQLite do servidor (escala.db). Podes guardar uma cópia ou substituir tudo por uma cópia anterior.' : 'Podes copiar os dados desta página e importá-los noutra instalação.'}</p>
@@ -1774,8 +1830,33 @@ function renderSettings() {
       <button class="btn danger" data-action="data-import" ${ro}>Importar o que está abaixo</button>
     </div>
     <textarea id="data-json" spellcheck="false" placeholder="Cola aqui uma cópia em JSON para importar" aria-label="Dados em JSON"></textarea>
-  </section>
-  <div id="cfg-warn">${cfgWarnHTML(warn)}</div>`;
+  </section>`;
+}
+/** Reduz a imagem escolhida para o logótipo a um PNG de 128 px (SVG pequeno fica como está). */
+function readLogoFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return reject(new Error('sem ficheiro'));
+    if (file.size > 4 * 1024 * 1024) return reject(new Error('A imagem é demasiado grande (máximo 4 MB).'));
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+    fr.onload = () => {
+      const url = String(fr.result || '');
+      if (file.type === 'image/svg+xml' && file.size <= 100 * 1024) return resolve(url);
+      const img = new Image();
+      img.onerror = () => reject(new Error('A imagem não é válida.'));
+      img.onload = () => {
+        const size = 128, cv = document.createElement('canvas'); cv.width = size; cv.height = size;
+        const ctx = cv.getContext('2d'), r = Math.min(size / img.width, size / img.height);
+        const w = Math.max(1, Math.round(img.width * r)), h = Math.max(1, Math.round(img.height * r));
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        const out = cv.toDataURL('image/png');
+        if (out.length > 200 * 1024) return reject(new Error('A imagem ficou demasiado pesada; tenta uma mais simples.'));
+        resolve(out);
+      };
+      img.src = url;
+    };
+    fr.readAsDataURL(file);
+  });
 }
 
 /* ---------- Atualização da aplicação ---------- */
@@ -1808,7 +1889,7 @@ function renderUpdatePanel() {
 }
 async function loadApp() {
   try { state.app = await store.call('api/app', 'GET'); } catch { state.app = null; return; }
-  if (state.tab === 'turnos') render();
+  if (state.tab === 'definicoes') render();
 }
 /** Espera que o servidor volte depois de um reinício. */
 async function waitForServer(maxMs = 60000) {
@@ -2321,6 +2402,19 @@ document.addEventListener('click', async ev => {
       if (!await confirmBox('Repor predefinições', 'Voltar aos turnos das 9h, 10h e 11h, noite de serviço das 19:00 às 07:00 e almoço entre as 12:00 e as 16:00? Só fica gravado quando guardares.', 'Repor')) break;
       state.cfgDraft = clone(DEFAULT_CONFIG); state.cfgDirty = true; render(); break;
     case 'cfg-discard': state.cfgDraft = null; state.cfgDirty = false; render(); break;
+    case 'pref-discard': state.prefsDraft = null; render(); break;
+    case 'pref-logo-clear': {
+      state.prefsDraft = { ...(state.prefsDraft || { siteTitle: cfg().siteTitle || '', siteTagline: cfg().siteTagline || '' }), siteLogo: '' };
+      render(); break;
+    }
+    case 'pref-save': {
+      const p = state.prefsDraft; if (!p) break;
+      const c = { ...cfg(), siteTitle: String(p.siteTitle || '').trim().slice(0, 60) || DEFAULT_CONFIG.siteTitle,
+        siteTagline: String(p.siteTagline || '').trim().slice(0, 100), siteLogo: p.siteLogo || '' };
+      /* Se o separador Turnos tiver alterações por guardar, mantém-nas no rascunho. */
+      if (state.cfgDraft) Object.assign(state.cfgDraft, { siteTitle: c.siteTitle, siteTagline: c.siteTagline, siteLogo: c.siteLogo });
+      store.saveConfig(c); state.prefsDraft = null; render(); toast('Definições guardadas.'); break;
+    }
     case 'cfg-save': {
       const c = clone(draft());
       c.lunchMin = Math.max(15, +c.lunchMin || 60);
@@ -2554,6 +2648,11 @@ document.addEventListener('input', ev => {
     const pos = t.selectionStart;
     render();
     const s = $('#team-search'); s.focus(); try { s.setSelectionRange(pos, pos); } catch {}
+  } else if (t.dataset?.pref) {
+    state.prefsDraft = state.prefsDraft || { siteTitle: cfg().siteTitle || '', siteTagline: cfg().siteTagline || '', siteLogo: cfg().siteLogo || '' };
+    state.prefsDraft[t.dataset.pref] = t.value;
+    const save = document.querySelector('[data-action="pref-save"]'); if (save && !state.readOnly) save.disabled = false;
+    const disc = document.querySelector('[data-action="pref-discard"]'); if (disc) disc.disabled = false;
   } else if (t.dataset?.cfg && t.type !== 'checkbox' && t.tagName !== 'SELECT') {
     if (t.dataset.time) t.classList.toggle('bad', !!t.value.trim() && !normalizeTime(t.value));
     applyCfgInput(t);
@@ -2562,8 +2661,17 @@ document.addEventListener('input', ev => {
     refreshCfgBits();
   }
 });
-document.addEventListener('change', ev => {
+document.addEventListener('change', async ev => {
   const t = ev.target;
+  if (t.id === 'pref-logo') {
+    const file = t.files?.[0]; if (!file) return;
+    try {
+      const url = await readLogoFile(file);
+      state.prefsDraft = { ...(state.prefsDraft || { siteTitle: cfg().siteTitle || '', siteTagline: cfg().siteTagline || '' }), siteLogo: url };
+      render();
+    } catch (e) { toast(e.message || 'Não foi possível usar essa imagem.'); }
+    return;
+  }
   if (!t.dataset?.cfg) return;
   if (t.dataset.time) {
     const clean = normalizeTime(t.value);

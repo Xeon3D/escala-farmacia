@@ -53,9 +53,19 @@ administrador e fecha as sessões abertas. Em Docker:
 docker exec -it escala-farmacia python server.py --reset-admin o-teu-utilizador
 ```
 
+## Definições
+
+O separador **Definições** junta o que diz respeito à instalação e não à escala:
+
+- **Aparência**: título, subtítulo e logótipo mostrados no cabeçalho e no separador do
+  navegador. O logótipo (PNG, JPG, WebP ou SVG) é reduzido para 128 px e fica guardado na
+  base de dados.
+- **Versão da aplicação** (administradores): ver abaixo.
+- **Dados**: exportar e importar uma cópia em JSON.
+
 ## Atualizar sem recriar o contentor
 
-O separador **Turnos** tem, para administradores, o painel *Versão da aplicação*:
+O separador **Definições** tem, para administradores, o painel *Versão da aplicação*:
 
 1. **Procurar atualizações** — lê o ficheiro `VERSION` do repositório e compara com a
    versão a correr.
@@ -141,7 +151,7 @@ python -c "import sqlite3;print([r for r in sqlite3.connect('escala.db').execute
 ```
 
 Cópias de segurança: basta copiar `escala.db` (e, se existirem, `escala.db-wal` e
-`escala.db-shm`) com o servidor parado. No separador **Turnos → Dados** também há
+`escala.db-shm`) com o servidor parado. No separador **Definições → Dados** também há
 exportação e importação em JSON.
 
 ## API

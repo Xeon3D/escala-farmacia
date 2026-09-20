@@ -69,7 +69,12 @@ DEFAULT_SETTINGS = {
     "opening": [{"open": "09:00", "close": "20:00", "closed": False} for _ in range(7)],
     # Períodos com outro mínimo ao balcão: [{"from": "12:00", "to": "16:00", "min": 2}]
     "presenceBands": [],
+    # Aparência: título, subtítulo e logótipo (data URL de imagem, até ~200 KB).
+    "siteTitle": "Escala da Farmácia",
+    "siteTagline": "Turnos, plantão, almoços e horas da equipa",
+    "siteLogo": "",
 }
+LOGO_RE = re.compile(r"^data:image/(png|jpeg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$")
 
 # Equipa de exemplo, criada só quando a base de dados está vazia, para a aplicação
 # abrir com alguma coisa. Apaga-a e mete a tua equipa real.
@@ -724,8 +729,14 @@ def save_config(cfg: dict) -> None:
                  max(0, int(s.get("weekday") or 0)), max(0, int(s.get("weekend") or 0)), i),
             )
         for k in DEFAULT_SETTINGS:
-            if k in cfg:
-                conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", (k, json.dumps(cfg[k])))
+            if k not in cfg:
+                continue
+            v = cfg[k]
+            if k == "siteLogo":
+                v = v if isinstance(v, str) and len(v) <= 300_000 and LOGO_RE.match(v) else ""
+            elif k in ("siteTitle", "siteTagline"):
+                v = str(v or "")[:100]
+            conn.execute("INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)", (k, json.dumps(v)))
         conn.commit()
 
 
@@ -755,6 +766,7 @@ PAGE_TEMPLATE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{title}</title>
 <style>
 :root{color-scheme:light dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 body{margin:0;font:14px system-ui,sans-serif;background:#fafaf9}
@@ -766,9 +778,20 @@ img{max-width:100%}
 """
 
 
+def site_title() -> str:
+    try:
+        with lock:
+            row = conn.execute("SELECT value FROM settings WHERE key='siteTitle'").fetchone()
+        title = json.loads(row["value"]) if row else ""
+    except (sqlite3.Error, ValueError):
+        title = ""
+    return str(title or "").strip() or DEFAULT_SETTINGS["siteTitle"]
+
+
 def page_html() -> bytes:
+    import html
     fragment = (PUBLIC / "app.html").read_text(encoding="utf-8")
-    return PAGE_TEMPLATE.replace("{body}", fragment).encode("utf-8")
+    return PAGE_TEMPLATE.replace("{title}", html.escape(site_title())).replace("{body}", fragment).encode("utf-8")
 
 
 class Handler(BaseHTTPRequestHandler):
