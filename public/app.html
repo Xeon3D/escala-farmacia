@@ -457,7 +457,6 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
         <p class="hint">Um turno fixo é sempre atribuído nesse dia da semana ao gerar a escala.</p>
       </fieldset>
       <div class="row2">
-        <div class="field"><label for="emp-max">Máximo de turnos por semana</label><input type="number" id="emp-max" min="1" max="7" step="1" value="5"></div>
         <div class="field"><label for="emp-weekly">Horas por semana</label><input type="number" id="emp-weekly" min="0" max="80" step="0.5" placeholder="40"><p class="hint" id="emp-weekly-hint">Em branco usa o valor geral.</p></div>
       </div>
       <div class="row2">
@@ -1003,6 +1002,12 @@ const dayHours = () => Math.max(1, +cfg().dayHours || 8);
 /** Um desconto que cubra um dia inteiro equivale a uma folga paga pelo banco. */
 const isFullDayOff = cell => !!cell && !cell.sh && cell.bank >= dayHours();
 
+/** Noites de serviço feitas ao sábado ou domingo numa semana (cada uma dá uma folga extra na semana seguinte). */
+function weekendNightsIn(id, wk) {
+  let n = 0;
+  for (const d of [5, 6]) if (getCell(wk, id, d)?.sh?.night) n++;
+  return n;
+}
 /** Contas da semana de uma pessoa: horas feitas, pagas, creditadas e descontadas. */
 function weekStats(id, wk) {
   const e = state.employees[id];
@@ -1023,11 +1028,11 @@ function weekStats(id, wk) {
     if (c.sh && d === duty && c.pay === 'bank') { out.banked += h.normal; out.dutyWork += h.normal; }
     else out.work += h.normal;
     out.pay = out.work + out.apart;
-    /* A noite de serviço ao fim de semana dá um dia de folga extra, creditado no banco. */
-    if (c.sh?.night && d >= 5) { out.extraOff++; out.banked += dayHours(); }
+    if (c.sh?.night && d >= 5) out.extraOff++; // dá uma folga extra na semana seguinte
   }
-  /* Cada dia de férias desconta um dia de trabalho ao mínimo da semana. */
-  out.target = Math.max(0, weeklyTarget(e) - (out.vac + out.sick) * dayHours());
+  /* Férias, baixas e a folga extra pela noite de fim de semana da semana anterior descontam um dia ao mínimo. */
+  out.extraOffDue = e.extra ? 0 : weekendNightsIn(id, shiftWeek(wk, -1));
+  out.target = Math.max(0, weeklyTarget(e) - (out.vac + out.sick + out.extraOffDue) * dayHours());
   out.credited = out.work + out.used;             // conta para o mínimo semanal
   out.missing = Math.max(0, out.target - out.credited);
   return out;
@@ -1191,6 +1196,8 @@ function generate(wk) {
   const count = {}, nights = {}, hours = {};
   ids.forEach(id => {
     count[id] = 0; nights[id] = 0; hours[id] = 0;
+    /* A noite de fim de semana da semana anterior dá uma folga extra: conta como um dia já feito. */
+    if (!state.employees[id].extra) hours[id] += weekendNightsIn(id, shiftWeek(wk, -1)) * dayHours();
     /* Mantém férias e folgas já pagas pelo banco de horas */
     for (let d = 0; d < 7; d++) {
       const c = getCell(wk, id, d);
@@ -1204,8 +1211,8 @@ function generate(wk) {
   const hardOk = (id, d, sid, extraSlot = 0, look = lookup) => {
     const e = state.employees[id], sh = shiftOn(shiftById(sid), d);
     if (!sh) return false;
-    return !cellIssues(e, id, wk, d, { s: sid, sh, l: '' }, look, true).some(i => i.lvl === 'bad')
-      && count[id] < (e.maxPerWeek || 5) + extraSlot;
+    /* Sem limite de turnos: o que manda são as horas da semana (e o dia nunca se repete). */
+    return !cellIssues(e, id, wk, d, { s: sid, sh, l: '' }, look, true).some(i => i.lvl === 'bad');
   };
   /* Noites feitas nas últimas semanas, para rodar o plantão pela equipa. */
   const nightsBefore = id => { let n = 0; for (let k = 1; k <= 6; k++) for (let d = 0; d < 7; d++) if (getCell(shiftWeek(wk, -k), id, d)?.sh?.night) n++; return n; };
@@ -1273,18 +1280,16 @@ function generate(wk) {
         if (cells[id][d]) continue;
         const gente = ids.filter(o => cells[o][d]?.s).length;
         for (const base of dayShifts) {
-          /* Pode passar o máximo de turnos por um, se for a única forma de chegar às horas. */
-          if (!shiftFits(base, d) || !hardOk(id, d, base.id, 1)) continue;
+          if (!shiftFits(base, d) || !hardOk(id, d, base.id)) continue;
           const h = hoursOf(shiftOn(base, d), '').normal;
           if (!h) continue;
           const have = ids.filter(o => cells[o][d]?.s === base.id).length, need = needFor(base, d, wk);
           if (have >= need) continue;
-          const overMax = count[id] >= (e.maxPerWeek || 5) ? 6 : 0;
-          /* Prefere: dias inteiros, dias com menos gente, turnos ainda em falta, turnos preferidos e dentro do máximo. */
+          /* Prefere: dias inteiros, dias com menos gente, turnos ainda em falta e turnos preferidos. */
           /* Enquanto falta um dia inteiro prefere dias inteiros; perto do fim prefere o que não passe das horas. */
           const fit = falta >= h ? (dayHours() - Math.min(h, dayHours())) * 2 : (h - falta) * 3;
           const score = fit + gente * 3 - (need - have)
-            + (pref.length ? (pref.includes(base.id) ? -4 : 4) : 0) + overMax + Math.random();
+            + (pref.length ? (pref.includes(base.id) ? -4 : 4) : 0) + Math.random();
           if (!best || score < best.score) best = { d, sid: base.id, score };
         }
       }
@@ -1491,8 +1496,8 @@ function renderSchedule() {
       } else if (c) { tone = 'tone-x'; inner = '<b>?</b><span>removido</span>'; }
       tds += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}"><button class="cell ${tone} ${worst && worst !== 'info' ? 'has-' + worst : ''}" data-action="cell" data-id="${esc(id)}" data-d="${d}" title="${esc(label)}" aria-label="${esc(label)}" aria-haspopup="menu" ${state.readOnly ? 'disabled' : ''}>${inner}${e.fixed?.[d] ? '<i class="pin">fixo</i>' : ''}${c?.pay === 'bank' ? '<i class="pin bankpin">banco</i>' : ''}${isBackoffice(c) ? '<i class="pin backpin">back</i>' : ''}${c?.less ? `<i class="pin lesspin">−${fmtH(c.less)}h</i>` : ''}${worst === 'bad' || worst === 'warn' ? '<i class="flag"></i>' : ''}</button></td>`;
     }
-    const max = e.maxPerWeek || 5, over = st.turnos > max;
-    if (over) alerts.push({ lvl: 'warn', who: e.name, when: 'Semana', msg: `${st.turnos} turnos, acima do máximo de ${max}` });
+    const over = st.target > 0 && st.credited > st.target + 0.01;
+    if (over) alerts.push({ lvl: 'info', who: e.name, when: 'Semana', msg: `${fmtH(st.credited)} h, acima das ${fmtH(st.target)} h da semana` });
     if (st.missing > 0 && st.target > 0 && st.turnos + st.used > 0) {
       const saldoAntes = bankBefore(id, wk);
       alerts.push({
@@ -1503,7 +1508,8 @@ function renderSchedule() {
     }
     totalWork += st.work; totalApart += st.dbl;
     body += `<tr><th scope="row" class="emp">${personHTML(e, true)}</th>${tds}<td class="tot ${over || st.missing > 0 ? 'over' : ''}">` +
-      `<b>${st.target ? `${fmtH(st.credited)}/${fmtH(st.target)} h` : `${fmtH(st.credited)} h`}</b><span>${e.extra ? `${st.turnos} ${st.turnos === 1 ? 'dia' : 'dias'}` : `${st.turnos}/${max} turnos`}</span>` +
+      `<b>${st.target ? `${fmtH(st.credited)}/${fmtH(st.target)} h` : `${fmtH(st.credited)} h`}</b>${e.extra ? `<span>${st.turnos} ${st.turnos === 1 ? 'dia' : 'dias'}</span>` : ''}` +
+      (st.extraOffDue ? `<span class="bank">${st.extraOffDue === 1 ? 'folga extra' : st.extraOffDue + ' folgas extra'} (noite de fim de semana)</span>` : '') +
       (st.dbl ? `<span class="pay">+${fmtH(st.dbl)} h nocturnas</span>` : '') +
       (st.banked ? `<span class="bank">banco +${fmtH(st.banked)} h${st.extraOff ? ` (${st.extraOff === 1 ? 'folga extra' : st.extraOff + ' folgas extra'})` : ''}</span>` : '') +
       (st.used ? `<span class="bank used">banco −${fmtH(st.used)} h</span>` : '') +
@@ -1645,7 +1651,7 @@ function renderSchedule() {
         <dt>Descanso</dt><dd>Mínimo de ${C.minRest} h entre o fim de um turno e o início do seguinte</dd>
         <dt>Semana</dt><dd>${fmtH(+C.weeklyHours || 0)} h por pessoa, salvo valor próprio na ficha. Horas descontadas do banco contam para este mínimo</dd>
         <dt>Backoffice</dt><dd>Não trabalha ao sábado nem ao domingo. Quem é de backoffice por defeito entra sempre nesse posto</dd>
-        <dt>Noite de serviço</dt><dd>Folga obrigatória no dia seguinte. Ao sábado ou domingo dá ainda um dia de folga extra, creditado no banco (${fmtH(dayHours())} h)</dd>
+        <dt>Noite de serviço</dt><dd>Folga obrigatória no dia seguinte. Ao sábado ou domingo dá ainda uma folga extra na semana seguinte (menos ${fmtH(dayHours())} h no mínimo dessa semana)</dd>
         <dt>Banco de horas</dt><dd>No dia de plantão escolhes se as horas normais são pagas ou vão para o banco; as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte. Descontar ${fmtH(dayHours())} h num dia equivale a uma folga</dd>
       </dl>
       <p>Clica numa célula para escolher o turno e a hora de almoço. Para mudar horários, plantão e cobertura, <button class="linkbtn" data-action="tab" data-tab="turnos">edita os turnos</button>.</p>
@@ -1679,7 +1685,7 @@ function monthStats(monthKey) {
       if (c.sh && d === duty && c.pay === 'bank') r.banked += h.normal;
       else { r.work += h.normal; r.normal += h.normal; }
       r.pay = r.work + r.apart;
-      if (c.sh?.night && d >= 5) { r.extraOff++; r.banked += dayHours(); }
+      if (c.sh?.night && d >= 5) r.extraOff++;
       r.dias.push({ day, shift: c.sh ? c.sh.short : `${fmtH(c.hrs)}h` });
     }
   }
@@ -1740,7 +1746,7 @@ function renderHours() {
     <tbody>${body}</tbody>
     <tfoot><tr><th class="emp">Total da equipa</th><td>${tot.turnos}</td><td>${tot.noites}</td><td>${tot.fds}</td><td class="vaccol">${tot.vac || '—'}</td><td class="sickcol">${tot.sick || '—'}</td><td>${fmtH(tot.work)}</td><td class="dbl">${fmtH(tot.dbl)}</td><td class="dbl">${fmtH(tot.apart)}</td><td class="bankcol">${tot.banked ? '+' + fmtH(tot.banked) : '—'}</td><td class="bankcol">${tot.used ? '−' + fmtH(tot.used) : '—'}</td><td>${fmtBank(tot.saldo)}</td></tr></tfoot>
   </table></div>
-  <p class="note">O <b>banco de horas</b> junta as horas normais do dia de plantão que escolheste não pagar (as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte e nunca vão para o banco), credita ${fmtH(dayHours())} h por cada noite de serviço feita ao sábado ou domingo (o dia de folga extra) e desconta as horas de folga que a pessoa gastou. O saldo já inclui o valor inicial de cada ficha. As horas trabalhadas são o tempo real de presença, já sem o almoço e já com as horas a menos de quem chegou tarde ou saiu cedo; as horas dos extras contam pelo que marcaste em cada dia. As horas entre <b>${C.doubleFrom}</b> e <b>${C.doubleTo}</b> <b>não entram nas horas trabalhadas</b>: ficam na coluna «horas nocturnas» e pagam-se à parte, ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}. Na noite de serviço das ${shiftById('N')?.start || '19:00'} às ${shiftById('N')?.end || '07:00'} só as primeiras horas (até às ${C.doubleFrom}) contam como trabalhadas. Um turno conta no dia em que começa.</p>`}`;
+  <p class="note">O <b>banco de horas</b> junta as horas normais do dia de plantão que escolheste não pagar (as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte e nunca vão para o banco), e desconta as horas de folga que a pessoa gastou. O saldo já inclui o valor inicial de cada ficha. As horas trabalhadas são o tempo real de presença, já sem o almoço e já com as horas a menos de quem chegou tarde ou saiu cedo; as horas dos extras contam pelo que marcaste em cada dia. As horas entre <b>${C.doubleFrom}</b> e <b>${C.doubleTo}</b> <b>não entram nas horas trabalhadas</b>: ficam na coluna «horas nocturnas» e pagam-se à parte, ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}. Na noite de serviço das ${shiftById('N')?.start || '19:00'} às ${shiftById('N')?.end || '07:00'} só as primeiras horas (até às ${C.doubleFrom}) contam como trabalhadas. Um turno conta no dia em que começa.</p>`}`;
 }
 
 function renderTeam() {
@@ -1764,7 +1770,6 @@ function renderTeam() {
         <dt>Prefere</dt><dd>${esc(pref)}</dd>
         <dt>Indisponível</dt><dd>${esc(off)}</dd>
         <dt>Turnos fixos</dt><dd>${esc(fixed)}</dd>
-        <dt>Máximo</dt><dd>${e.maxPerWeek || 5} turnos/semana</dd>
         <dt>Semana</dt><dd>${weeklyTarget(e) ? `${fmtH(weeklyTarget(e))} h${e.weeklyHours == null ? ' (valor geral)' : ''}` : 'Sem mínimo'}</dd>
         <dt>Banco</dt><dd class="${bankBalance(id) < 0 ? 'no' : 'yes'}">${fmtBank(bankBalance(id))}${+e.bankInitial ? ` (inicial ${fmtBank(+e.bankInitial)})` : ''}</dd>
       </dl>
@@ -2342,7 +2347,7 @@ function buildShiftFields(e) {
 }
 function openEditor(id) {
   editingId = id || null;
-  const e = id ? state.employees[id] : { name: '', role: '', color: COLORS[Object.keys(state.employees).length % COLORS.length], acceptsNight: false, acceptsWeekend: true, preferred: [], daysOff: [], maxPerWeek: 5, fixed: {}, notes: '' };
+  const e = id ? state.employees[id] : { name: '', role: '', color: COLORS[Object.keys(state.employees).length % COLORS.length], acceptsNight: false, acceptsWeekend: true, preferred: [], daysOff: [], fixed: {}, notes: '' };
   $('#editor-title').textContent = id ? 'Editar funcionário' : 'Novo funcionário';
   $('#emp-name').value = e.name || '';
   $('#emp-role').value = e.role || '';
@@ -2354,7 +2359,6 @@ function openEditor(id) {
   $('#emp-extra').checked = !!e.extra;
   buildShiftFields(e);
   DAYS.forEach((_, i) => { $('#emp-off-' + i).checked = (e.daysOff || []).includes(i); });
-  $('#emp-max').value = e.maxPerWeek || 5;
   $('#emp-weekly').value = e.weeklyHours ?? '';
   $('#emp-weekly-hint').textContent = `Em branco usa o valor geral (${fmtH(+cfg().weeklyHours || 0)} h).`;
   $('#emp-bank').value = e.bankInitial ?? 0;
@@ -2377,7 +2381,6 @@ function readEditor() {
     extra: $('#emp-extra').checked,
     preferred: [...document.querySelectorAll('#emp-pref input:checked')].map(i => i.value),
     daysOff: DAYS.map((_, i) => i).filter(i => $('#emp-off-' + i).checked),
-    maxPerWeek: Math.min(7, Math.max(1, parseInt($('#emp-max').value, 10) || 5)),
     weeklyHours: $('#emp-weekly').value === '' ? null : Math.min(80, Math.max(0, +$('#emp-weekly').value || 0)),
     bankInitial: Math.min(2000, Math.max(-2000, +$('#emp-bank').value || 0)),
     fixed,
@@ -2396,7 +2399,6 @@ function updateEditorWarn() {
     const next = shiftById(e.fixed[di + 1]);
     if (next && 1440 + toMin(next.start) - span(sh)[1] < C.minRest * 60) w.push(`${DAYS_LONG[di]} → ${DAYS_LONG[di + 1]}: menos de ${C.minRest} h de descanso entre os turnos fixos`);
   }
-  if (Object.keys(e.fixed).length > e.maxPerWeek) w.push(`Tem ${Object.keys(e.fixed).length} turnos fixos mas o máximo é ${e.maxPerWeek}`);
   if (e.preferred.some(p => shiftById(p)?.night) && !e.acceptsNight) w.push('Prefere a noite, mas o turno noturno está desligado');
   if (e.backoffice && e.acceptsWeekend) w.push('Backoffice por defeito: não vai ser escalada ao sábado nem ao domingo, mesmo aceitando fins de semana');
   if (e.backoffice && Object.keys(e.fixed).some(d => +d >= 5)) w.push('Turno fixo ao fim de semana numa pessoa de backoffice');

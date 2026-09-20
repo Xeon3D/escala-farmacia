@@ -184,8 +184,8 @@ exportação e importação em JSON.
   no banco.
 - **Noite de serviço**: quem faz a noite fica obrigatoriamente de folga no dia seguinte
   (um turno nesse dia aparece como conflito). Se a noite calhar a sábado ou domingo, a
-  pessoa ganha um dia de folga extra, creditado no banco de horas com o valor do «dia
-  completo» (8 h por omissão), que depois se gasta como folga paga pelo banco.
+  pessoa tem uma folga extra na semana seguinte: o mínimo dessa semana baixa um «dia
+  completo» (8 h por omissão) e a geração automática escala-a um dia a menos.
 - **Saldo inicial**: a ficha de cada funcionário tem *Banco de horas já acumulado*, para
   lançares as horas de antes de usares a aplicação. Pode ser negativo.
 - **Descontar horas**: no menu da célula escolhes −2 h, −4 h, −6 h ou um dia inteiro.
@@ -240,9 +240,10 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
   noite de serviço das 19:00 às 07:00 só as 3 h das 19:00 às 22:00 contam como
   trabalhadas; as 9 h restantes são horas nocturnas.
 - **Horas da semana**: ao gerar a escala, toda a gente (menos os extras) é levada às
-  suas horas semanais (40 h por omissão), mesmo para lá da cobertura mínima — a
-  geração pode passar o máximo de turnos por um quando é a única forma de lá chegar, e
-  avisa quando não consegue (dias indisponíveis, fins de semana curtos, etc.).
+  suas horas semanais (40 h por omissão), preenchendo só os lugares definidos em cada
+  turno (o número de pessoas é o que se quer, não um mínimo). Não há limite de turnos
+  por semana: o que conta são as horas. Quando não consegue (dias indisponíveis,
+  fins de semana curtos, poucos lugares), avisa.
 - **Plantão**: um dia por semana, a recuar um dia por semana. A semana de referência e
   o dia são configuráveis.
 - **Descanso**: mínimo de 11 h entre o fim de um turno e o início do seguinte.
