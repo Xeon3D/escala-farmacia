@@ -1740,6 +1740,7 @@ function renderSchedule() {
     <div class="actions">
       <button class="btn primary" data-action="generate" ${ro || !ids.length ? 'disabled' : ''}>Gerar escala</button>
       <button class="btn" data-action="relunch" ${ro || !hasSched ? 'disabled' : ''}>Distribuir almoços</button>
+      <button class="btn" data-action="level" ${ro || !hasSched ? 'disabled' : ''} title="Experimental: troca os turnos de quem já trabalha em cada dia para que haja um número mais parecido de pessoas ao balcão ao longo do dia">Nivelar</button>
       <button class="btn" data-action="copy-prev" ${ro || !ids.length ? 'disabled' : ''}>Copiar semana anterior</button>
       <button class="btn" data-action="clear" ${ro || !hasSched ? 'disabled' : ''}>Limpar semana</button>
       <button class="btn" data-action="print">Imprimir</button>
@@ -2485,6 +2486,75 @@ function setBankOff(id, d, hours) {
   }
   writeCell(id, d, { bank: hours });
 }
+/* ---------- Nivelar (experimental) ----------
+   Mantém quem trabalha em cada dia e troca só o turno de cada um, para que o número de pessoas ao
+   balcão fique o mais parecido possível ao longo do horário de abertura (sem descer do mínimo). */
+function levelWeek(wk) {
+  const ids = sortedIds(), dayShifts = sortedShifts().filter(sh => !sh.night && !sh.onlyDuty);
+  const sched = clone(state.schedules[wk] || { cells: {} }); sched.cells = sched.cells || {};
+  const spread = { before: 0, after: 0 }; let moved = 0;
+  for (let d = 0; d < 7; d++) {
+    if (isClosed(d) || !dayShifts.length) continue;
+    const [oa, ob] = openSpan(d);
+    const workers = ids.filter(id => { const c = getCell(wk, id, d); return c?.sh && !c.sh.night && !c.sh.onlyDuty; });
+    if (workers.length < 2) continue;
+    const assign = {}; workers.forEach(id => { assign[id] = getCell(wk, id, d).s; });
+    const back = {}; workers.forEach(id => { back[id] = getCell(wk, id, d).post === 'back'; });
+    const fixed = {}; workers.forEach(id => { fixed[id] = !!normId(state.employees[id].fixed?.[d]); });
+    const counts = () => {
+      const out = [];
+      for (let t = oa; t < ob; t += 30) {
+        let n = 0;
+        for (const id of workers) { if (back[id]) continue; const sh = shiftOn(shiftById(assign[id]), d); if (!sh) continue; const [a, b] = span(sh); if (a <= t && t < b) n++; }
+        out.push({ t, n, min: minAt(t) });
+      }
+      return out;
+    };
+    const cost = () => {
+      const c = counts(), avg = c.reduce((x, y) => x + y.n, 0) / c.length;
+      return c.reduce((acc, { n, min }) => acc + (n - avg) ** 2 + 10 * Math.max(0, min - n) ** 2, 0);
+    };
+    const okFor = (id, sid) => {
+      const sh = shiftOn(shiftById(sid), d); if (!sh || !shiftFits(shiftById(sid), d)) return false;
+      const e = state.employees[id];
+      const look = (w, i, dd) => (w === wk && i === id && dd === d) ? { s: sid, sh, l: '' } : getCell(w, i, dd);
+      return !cellIssues(e, id, wk, d, { s: sid, sh, l: '' }, look, true).some(i => i.lvl === 'bad');
+    };
+    const range = c => Math.max(...c.map(x => x.n)) - Math.min(...c.map(x => x.n));
+    spread.before += range(counts());
+    let cur = cost();
+    for (let round = 0; round < 12; round++) {
+      let improved = false;
+      for (const id of workers) {
+        if (fixed[id]) continue;
+        let best = { sid: assign[id], cost: cur };
+        for (const sh of dayShifts) {
+          if (sh.id === assign[id] || !okFor(id, sh.id)) continue;
+          const prev = assign[id]; assign[id] = sh.id;
+          const k = cost(); assign[id] = prev;
+          if (k < best.cost - 1e-9) best = { sid: sh.id, cost: k };
+        }
+        if (best.sid !== assign[id]) { assign[id] = best.sid; cur = best.cost; improved = true; }
+      }
+      if (!improved) break;
+    }
+    spread.after += range(counts());
+    /* Escreve as trocas e volta a marcar os almoços do dia (desencontrados), mantendo posto, pagamento e horas a menos. */
+    const changed = workers.filter(id => assign[id] !== getCell(wk, id, d).s);
+    moved += changed.length;
+    if (!changed.length) continue;
+    const taken = [];
+    workers.sort((a, b) => toMin(shiftById(assign[a]).start) - toMin(shiftById(assign[b]).start)).forEach(id => {
+      const c = getCell(wk, id, d), raw = cellRaw(c); raw.s = assign[id]; delete raw.l;
+      const sh = shiftOn(shiftById(assign[id]), d);
+      if (sh.lunch) { const l = changed.includes(id) || !c.l ? pickLunch(sh, taken) : c.l; if (l) { raw.l = l; taken.push(toMin(l)); } }
+      sched.cells[id] = sched.cells[id] || {}; sched.cells[id][d] = raw;
+    });
+  }
+  if (moved) { sched.updatedAt = new Date().toISOString(); store.saveWeek(wk, sched); }
+  render();
+  return { moved, ...spread };
+}
 function redistributeLunches() {
   const wk = state.week, ids = sortedIds();
   const sched = clone(state.schedules[wk] || { cells: {} });
@@ -2495,7 +2565,7 @@ function redistributeLunches() {
       .sort((a, b) => toMin(a.c.sh.start) - toMin(b.c.sh.start))
       .forEach(({ id, c }) => {
         const l = pickLunch(c.sh, taken);
-        sched.cells[id][d] = { s: c.sh.id, ...(l ? { l } : {}) };
+        sched.cells[id][d] = { ...cellRaw(c), ...(l ? { l } : {}) };
         if (l) taken.push(toMin(l));
       });
   }
@@ -2771,6 +2841,11 @@ document.addEventListener('click', async ev => {
       render(); toast('Escala gerada. Revê os alertas e ajusta o que for preciso.'); break;
     }
     case 'relunch': redistributeLunches(); toast('Almoços redistribuídos para não coincidirem.'); break;
+    case 'level': {
+      const r = levelWeek(state.week);
+      toast(r.moved ? `Nivelado: ${r.moved} ${r.moved === 1 ? 'turno trocado' : 'turnos trocados'} (diferença máx–mín ao balcão na semana: ${r.before} → ${r.after}).` : 'Já está o mais nivelado que os turnos permitem.');
+      break;
+    }
     case 'copy-prev': {
       const prev = state.schedules[shiftWeek(state.week, -1)]?.cells;
       if (!prev || !Object.values(prev).some(c => Object.keys(c).length)) { toast('A semana anterior não tem turnos para copiar.'); break; }
