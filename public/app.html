@@ -150,6 +150,7 @@ table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:980px}
 .grid thead th .duty-tag{display:inline-block;margin-top:3px;font:10px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--n-ink);background:var(--n-bg);border-radius:4px;padding:1px 5px}
 .grid .we{background:var(--weekend)}
 .grid .duty{background:var(--duty)}
+.grid tr.group th{text-align:left;font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);background:var(--surface-2);padding:5px 12px;position:sticky;left:0}
 .grid th.emp{text-align:left;position:sticky;left:0;z-index:1;background:var(--surface);min-width:190px;border-right:1px solid var(--line);padding:8px 12px}
 .grid thead th.emp{z-index:2;font-size:12px;letter-spacing:.06em;text-transform:uppercase}
 .person{display:flex;align-items:center;gap:10px}
@@ -1652,8 +1653,19 @@ function renderSchedule() {
   const alerts = [];
   let body = '', totalWork = 0, totalApart = 0;
 
-  for (const id of ids) {
+  /* Secções: balcão, administrativo/backoffice e extras. */
+  const groupOf = id => (state.employees[id].extra ? 'extra' : state.employees[id].backoffice ? 'back' : 'counter');
+  const GROUPS = [['counter', 'Balcão'], ['back', 'Administrativo · backoffice'], ['extra', 'Extras']];
+  const present = GROUPS.filter(([g]) => ids.some(id => groupOf(id) === g));
+  const ordered = present.flatMap(([g]) => ids.filter(id => groupOf(id) === g));
+  let lastGroup = null;
+  for (const id of ordered) {
     const e = state.employees[id]; let tds = '';
+    const g = groupOf(id);
+    if (present.length > 1 && g !== lastGroup) {
+      body += `<tr class="group"><th scope="rowgroup" colspan="9">${GROUPS.find(([k]) => k === g)[1]}</th></tr>`;
+      lastGroup = g;
+    }
     const st = weekStats(id, wk), saldoFim = bankBalance(id, wk);
     for (let d = 0; d < 7; d++) {
       const c = getCell(wk, id, d), iss = cellIssues(e, id, wk, d, c), worst = worstOf(iss);
