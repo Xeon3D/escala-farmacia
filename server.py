@@ -484,10 +484,13 @@ def _rmtree(path: Path) -> None:
 
 
 def restart_process(delay: float = 0.8) -> None:
-    """Reinicia o processo (sem recriar o contentor) para correr a versão nova.
+    """Reinicia o processo (sem recriar o contentor) para correr a versão apontada.
 
-    Primeiro tenta substituir o processo (execv). Se isso falhar, termina o processo:
-    em Docker o restart policy volta a arrancá-lo, já com a versão instalada no volume.
+    Lança diretamente o server.py da versão instalada no volume (ou o da imagem, se o
+    ponteiro foi apagado), sem depender do arranque da imagem — e com o ambiente certo:
+    o ESCALA_BOOT_SCRIPT herdado de um processo que já corria do volume fazia o arranque
+    da imagem pensar que já estava na versão do volume e nunca trocar.
+    Se o exec falhar, termina o processo: em Docker o restart policy volta a arrancá-lo.
     """
     def go():
         time.sleep(delay)
@@ -496,9 +499,16 @@ def restart_process(delay: float = 0.8) -> None:
         except Exception:  # noqa: BLE001
             pass
         exe = sys.executable or "python3"
-        print(f"A reiniciar: {exe} {BOOT_SCRIPT} {' '.join(BOOT_ARGS)}", flush=True)
+        env = {k: v for k, v in os.environ.items() if k not in ("ESCALA_BOOT_SCRIPT", "ESCALA_BASE_VERSION")}
+        target = installed_dir()
+        if target is not None:
+            script = str(target / "server.py")
+            env.update(ESCALA_BOOT_SCRIPT=BOOT_SCRIPT, ESCALA_BASE_VERSION=BASE_VERSION)
+        else:
+            script = BOOT_SCRIPT
+        print(f"A reiniciar: {exe} {script} {' '.join(BOOT_ARGS)}", flush=True)
         try:
-            os.execv(exe, [exe, BOOT_SCRIPT, *BOOT_ARGS])
+            os.execve(exe, [exe, script, *BOOT_ARGS], env)
         except OSError as e:
             print(f"Não foi possível substituir o processo ({e}); a terminar para o Docker reiniciar.", flush=True)
             os._exit(1)
@@ -513,8 +523,12 @@ BASE_VERSION = os.environ.get("ESCALA_BASE_VERSION") or APP_VERSION
 
 def boot_overlay() -> bool:
     """Arranca a versão instalada no volume, se houver uma diferente desta."""
-    if not UPDATES_ENABLED or os.environ.get("ESCALA_BOOT_SCRIPT"):
-        return False  # já estamos a correr a versão do volume
+    if not UPDATES_ENABLED:
+        return False
+    # Só estamos "a correr do volume" se este ficheiro não for o carregador da imagem;
+    # a variável de ambiente pode vir herdada de um reinício e não chega para decidir.
+    if os.environ.get("ESCALA_BOOT_SCRIPT") and Path(__file__).resolve() != Path(BOOT_SCRIPT).resolve():
+        return False
     d = installed_dir()
     if d is None:
         return False
@@ -552,6 +566,10 @@ def boot_overlay() -> bool:
     return True  # inalcançável
 
 
+def running_from_volume() -> bool:
+    return bool(os.environ.get("ESCALA_BOOT_SCRIPT")) and Path(__file__).resolve() != Path(BOOT_SCRIPT).resolve()
+
+
 def boot_ok() -> None:
     """Chamado quando o servidor está de pé: limpa o contador de tentativas."""
     try:
@@ -559,7 +577,7 @@ def boot_ok() -> None:
     except OSError:
         pass
     # Se é a versão do volume que está a correr, a falha anterior já não interessa.
-    if os.environ.get("ESCALA_BOOT_SCRIPT"):
+    if running_from_volume():
         clear_boot_failed()
 
 
@@ -1009,7 +1027,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({
                 "version": APP_VERSION,
                 "baseVersion": BASE_VERSION,
-                "running": "volume" if os.environ.get("ESCALA_BOOT_SCRIPT") else "imagem",
+                "running": "volume" if running_from_volume() else "imagem",
                 "installedAt": p.get("installedAt"),
                 "previousVersion": p.get("previousVersion") if p.get("previous") else None,
                 "canRollback": bool(p.get("previous")) or bool(p.get("dir")),
@@ -1372,7 +1390,7 @@ def main():
     boot_ok()
     if UPDATES_ENABLED:
         threading.Thread(target=auto_check_loop, daemon=True, name="auto-check").start()
-    origem = "volume de dados" if os.environ.get("ESCALA_BOOT_SCRIPT") else "imagem"
+    origem = "volume de dados" if running_from_volume() else "imagem"
     print(f"Escala da Farmácia {APP_VERSION} ({origem})  ->  {url}")
     print(f"Base de dados: {Path(args.db).resolve()}")
     print("Ctrl+C para parar.")
