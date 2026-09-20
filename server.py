@@ -439,11 +439,17 @@ def install_update(ref: str | None = None) -> dict:
         "previousVersion": previous.get("version") or APP_VERSION,
     })
     prune_versions()
+    clear_boot_failed()
+    try:
+        (APP_DIR / "boot_attempts").write_text("0")
+    except OSError:
+        pass
     return {"version": version, "dir": name}
 
 
 def rollback_update() -> dict:
     """Volta à versão anterior; sem versão anterior, volta à que vem na imagem."""
+    clear_boot_failed()
     p = read_pointer()
     prev = p.get("previous")
     if prev and (APP_DIR / "versions" / prev / "server.py").is_file():
@@ -478,14 +484,24 @@ def _rmtree(path: Path) -> None:
 
 
 def restart_process(delay: float = 0.8) -> None:
-    """Reinicia o processo (sem recriar o contentor) para correr a versão nova."""
+    """Reinicia o processo (sem recriar o contentor) para correr a versão nova.
+
+    Primeiro tenta substituir o processo (execv). Se isso falhar, termina o processo:
+    em Docker o restart policy volta a arrancá-lo, já com a versão instalada no volume.
+    """
     def go():
         time.sleep(delay)
         try:
             conn.close()
         except Exception:  # noqa: BLE001
             pass
-        os.execv(sys.executable, [sys.executable, BOOT_SCRIPT, *BOOT_ARGS])
+        exe = sys.executable or "python3"
+        print(f"A reiniciar: {exe} {BOOT_SCRIPT} {' '.join(BOOT_ARGS)}", flush=True)
+        try:
+            os.execv(exe, [exe, BOOT_SCRIPT, *BOOT_ARGS])
+        except OSError as e:
+            print(f"Não foi possível substituir o processo ({e}); a terminar para o Docker reiniciar.", flush=True)
+            os._exit(1)
     threading.Thread(target=go, daemon=True).start()
 
 
@@ -512,15 +528,27 @@ def boot_overlay() -> bool:
         attempts = 0
     if attempts >= 3:
         print(f"A versão instalada ({version_of(target)}) falhou a arrancar {attempts} vezes."
-              f" A usar a versão da imagem ({APP_VERSION}). Usa a reversão na aplicação.")
+              f" A usar a versão da imagem ({APP_VERSION}). Usa a reversão na aplicação.", flush=True)
+        # Fica registado para a interface explicar porque é que continua a correr a versão da imagem.
+        try:
+            (APP_DIR / "boot_failed.json").write_text(json.dumps({
+                "version": version_of(target), "dir": d.name, "attempts": attempts,
+                "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            }), encoding="utf-8")
+        except OSError:
+            pass
         return False
     try:
         attempts_file.write_text(str(attempts + 1))
     except OSError:
         pass
     env = dict(os.environ, ESCALA_BOOT_SCRIPT=BOOT_SCRIPT, ESCALA_BASE_VERSION=APP_VERSION)
-    print(f"A arrancar a versão instalada {version_of(target)} a partir de {target}")
-    os.execve(sys.executable, [sys.executable, str(target), *sys.argv[1:]], env)
+    print(f"A arrancar a versão instalada {version_of(target)} a partir de {target} (tentativa {attempts + 1})", flush=True)
+    try:
+        os.execve(sys.executable or "python3", [sys.executable or "python3", str(target), *sys.argv[1:]], env)
+    except OSError as e:
+        print(f"Não foi possível arrancar a versão instalada ({e}); a usar a versão da imagem.", flush=True)
+        return False
     return True  # inalcançável
 
 
@@ -530,6 +558,23 @@ def boot_ok() -> None:
         (APP_DIR / "boot_attempts").write_text("0")
     except OSError:
         pass
+    # Se é a versão do volume que está a correr, a falha anterior já não interessa.
+    if os.environ.get("ESCALA_BOOT_SCRIPT"):
+        clear_boot_failed()
+
+
+def clear_boot_failed() -> None:
+    try:
+        (APP_DIR / "boot_failed.json").unlink()
+    except OSError:
+        pass
+
+
+def boot_failed() -> dict | None:
+    try:
+        return json.loads((APP_DIR / "boot_failed.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
 
 
 # ---------------------------------------------------------- autenticação
@@ -970,6 +1015,7 @@ class Handler(BaseHTTPRequestHandler):
                 "repo": UPDATE_REPO, "ref": UPDATE_REF,
                 "changes": [e for e in local_changelog() if e["version"] == APP_VERSION],
                 "autoCheck": auto_check_state(),
+                "bootFailed": boot_failed(),
             })
         if path == "/api/app/check":
             if not self.require(admin=True):

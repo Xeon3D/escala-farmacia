@@ -2034,6 +2034,7 @@ function renderUpdatePanel() {
     <dl class="facts" style="grid-template-columns:auto 1fr;max-width:520px;margin-bottom:14px">
       <dt>Versão a correr</dt><dd><b>${esc(a.version)}</b> <span class="muted">(${esc(a.running)})</span></dd>
       <dt>Versão da imagem</dt><dd>${esc(a.baseVersion)}</dd>
+      ${a.bootFailed ? `<dt>Atenção</dt><dd class="lvl-bad">A versão ${esc(a.bootFailed.version || '?')} foi instalada mas não conseguiu arrancar (${a.bootFailed.attempts} tentativas${a.bootFailed.at ? `, a última em ${esc(String(a.bootFailed.at).replace('T', ' às '))}` : ''}). Está a correr a versão da imagem. Vê os registos do contentor (<code>docker logs escala-farmacia</code>) e tenta atualizar de novo ou reverter.</dd>` : ''}
       ${a.installedAt ? `<dt>Instalada em</dt><dd>${esc(a.installedAt.replace('T', ' às '))}</dd>` : ''}
       ${upd && !upd.error ? `<dt>No repositório</dt><dd>${esc(upd.version)}${upd.upToDate ? ' — já estás na versão mais recente' : ' — <b>há uma versão nova</b>'}</dd>` : ''}
       ${upd && !upd.error && !upd.upToDate && upd.changes?.length ? `<dt>Novidades</dt><dd>${changelogHTML(upd.changes)}</dd>` : ''}
