@@ -4,6 +4,12 @@ Cada versão tem um cabeçalho `## versão — data` e uma lista de pontos. A ap
 aos administradores as entradas mais recentes do que a versão instalada quando procura
 atualizações.
 
+## 1.6.4 — 2026-09-20
+- Geração nova: nivela o balcão de segunda a sexta, escala só as «Pessoas ao sábado» e ao domingo apenas o plantão. Sem quotas por turno.
+- Bloquear células da escala para nada as alterar até serem desbloqueadas.
+- Separador Balcão: quem está ao balcão, hora a hora.
+- Banco de horas só conta horas já trabalhadas.
+
 ## 1.6.3 — 2026-09-20
 - Corrige a atualização dentro do contentor: a partir da segunda atualização o reinício ficava na versão da imagem.
 - Definições: escolher a imagem do logótipo voltou a funcionar.
