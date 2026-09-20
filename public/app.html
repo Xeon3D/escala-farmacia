@@ -489,7 +489,12 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
       <fieldset>
         <legend class="legend-lbl">Turnos fixos</legend>
         <div class="fixed-grid" id="emp-fixed"></div>
-        <p class="hint">Um turno fixo é sempre atribuído nesse dia da semana ao gerar a escala.</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+          <select id="emp-fix-all" aria-label="Turno para aplicar de segunda a sexta"></select>
+          <button type="button" class="btn" data-action="fix-weekdays">Aplicar de seg. a sex.</button>
+          <button type="button" class="btn" data-action="fix-clear">Limpar fixos</button>
+        </div>
+        <p class="hint">Um turno fixo é sempre atribuído nesse dia da semana ao gerar a escala. Para quem é de backoffice, escolhe aqui o horário de backoffice e aplica de segunda a sexta.</p>
       </fieldset>
       <div class="row2">
         <div class="field"><label for="emp-weekly">Horas por semana</label><input type="number" id="emp-weekly" min="0" max="80" step="0.5" placeholder="40"><p class="hint" id="emp-weekly-hint">Em branco usa o valor geral.</p></div>
@@ -785,7 +790,7 @@ const isClosed = d => openingOf(d).closed;
 /** Turno tal como se faz nesse dia da semana: cortado ao horário de abertura da farmácia.
  *  Os turnos «só no plantão» e noturnos não são cortados (a noite de serviço atravessa o fecho). */
 function shiftOn(sh, d) {
-  if (!sh || sh.onlyDuty || sh.night) return sh;
+  if (!sh || sh.onlyDuty || sh.night || sh.back) return sh;
   d = ((d % 7) + 7) % 7;
   const o = openingOf(d);
   if (o.closed) return sh;
@@ -803,6 +808,7 @@ function shiftFits(sh, d) {
   if (!sh) return false;
   if (sh.onlyDuty || sh.night) return true;
   if (openingOf(d).closed) return false;
+  if (sh.back) return true;
   const [a, b] = span(sh), [oa, ob] = openSpan(d);
   return Math.min(b, ob) > Math.max(a, oa);
 }
@@ -1220,6 +1226,7 @@ function cellIssues(e, id, wk, d, cell, lookup = getCell, both = false) {
     return out;
   }
   if (!sh) { out.push({ lvl: 'bad', msg: 'Este turno já não existe — escolhe outro' }); return out; }
+  if (sh.back && cell.post !== 'back') out.push({ lvl: 'warn', msg: 'Horário de backoffice: deve estar em backoffice, não ao balcão' });
   if (e.backoffice && d >= 5) out.push({ lvl: 'bad', msg: 'O backoffice não trabalha ao sábado nem ao domingo' });
   else if (cell.post === 'back' && d >= 5) out.push({ lvl: 'warn', msg: 'O backoffice não trabalha ao fim de semana' });
   if (e.extra) out.push({ lvl: 'info', msg: 'Pessoa extra com um turno completo — podes antes indicar só as horas que fez' });
@@ -1363,7 +1370,7 @@ function generate(wk, fromDay = 0) {
   const put = (id, d, sid) => {
     const sh = shiftOn(shiftById(sid), d);
     cells[id][d] = { s: sid }; count[id]++; hours[id] += hoursOf(sh, '').normal;
-    if (state.employees[id].backoffice && !sh.night) cells[id][d].post = 'back';
+    if ((state.employees[id].backoffice || sh.back) && !sh.night) cells[id][d].post = 'back';
     if (sh.night) nights[id]++;
   };
   /* Noites e sábados feitos nas últimas semanas, para rodar pela equipa. */
@@ -1371,7 +1378,7 @@ function generate(wk, fromDay = 0) {
   const nightsBefore = id => before(id, c => c?.sh?.night);
   const saturdaysBefore = id => before(id, (c, d) => d === 5 && worksOn(c) && !c.sh?.night);
   const target = id => weeklyTarget(state.employees[id]);
-  const dayShifts = sortedShifts().filter(sh => !sh.night && !sh.onlyDuty);
+  const dayShifts = sortedShifts().filter(sh => !sh.night && !sh.onlyDuty && !sh.back);
   const dd = dutyDay(wk);
 
   /* 1. Turnos fixos */
@@ -1450,7 +1457,7 @@ function generate(wk, fromDay = 0) {
   for (let d = fromDay; d < 7; d++) {
     if (isClosed(d) || dayShifts.length < 2) continue;
     const [oa, ob] = openSpan(d);
-    const workers = ids.filter(id => cells[id][d]?.s && !held(id, d) && !shiftById(cells[id][d].s)?.night && !shiftById(cells[id][d].s)?.onlyDuty && !normId(state.employees[id].fixed?.[d]));
+    const workers = ids.filter(id => cells[id][d]?.s && !held(id, d) && !shiftById(cells[id][d].s)?.night && !shiftById(cells[id][d].s)?.onlyDuty && !shiftById(cells[id][d].s)?.back && !normId(state.employees[id].fixed?.[d]));
     const others = ids.filter(id => cells[id][d]?.s && !workers.includes(id) && !shiftById(cells[id][d].s)?.night);
     if (workers.length < 2 && !others.length) continue;
     const isBack = id => cells[id][d].post === 'back';
@@ -1816,7 +1823,7 @@ function renderSchedule() {
   const ro = state.readOnly ? 'disabled' : '';
   const shiftsTxt = sortedShifts().map(s => {
     const h = hoursOf(s, '');
-    return `<dt><span class="dot ${toneOf(s)}"></span> ${esc(s.name)}</dt><dd>${s.start}–${s.end} · ${h.dbl ? `${fmtH(h.normal)} h trabalhadas + ${fmtH(h.dbl)} h nocturnas` : `${fmtH(h.work)} h`}${s.onlyDuty ? ' · só no dia de plantão' : ''}</dd>`;
+    return `<dt><span class="dot ${toneOf(s)}"></span> ${esc(s.name)}</dt><dd>${s.start}–${s.end} · ${h.dbl ? `${fmtH(h.normal)} h trabalhadas + ${fmtH(h.dbl)} h nocturnas` : `${fmtH(h.work)} h`}${s.onlyDuty ? ' · só no dia de plantão' : s.back ? ' · horário de backoffice' : ''}</dd>`;
   }).join('');
 
   return `
@@ -2156,6 +2163,7 @@ function renderSettings() {
       <td class="c"><input type="checkbox" id="cfg-${i}-lunch" data-cfg="shift" data-i="${i}" data-k="lunch" ${s.lunch ? 'checked' : ''} aria-label="Tem almoço" ${ro}></td>
       <td class="c"><input type="checkbox" id="cfg-${i}-night" data-cfg="shift" data-i="${i}" data-k="night" ${s.night ? 'checked' : ''} aria-label="Turno noturno" ${ro}></td>
       <td class="c"><input type="checkbox" id="cfg-${i}-onlyDuty" data-cfg="shift" data-i="${i}" data-k="onlyDuty" ${s.onlyDuty ? 'checked' : ''} aria-label="Só no dia de plantão" ${ro}></td>
+      <td class="c"><input type="checkbox" id="cfg-${i}-back" data-cfg="shift" data-i="${i}" data-k="back" ${s.back ? 'checked' : ''} aria-label="Horário de backoffice" title="Horário fixo de backoffice: não é usado ao balcão nem cortado ao horário de abertura" ${ro}></td>
       <td class="hrs" id="cfg-hrs-${i}">${validTime(s.start) && validTime(s.end) ? shiftHoursLabel(s, c) : '—'}</td>
       <td><button class="btn danger icon" data-action="cfg-remove" data-i="${i}" aria-label="Remover turno ${esc(s.name)}" ${ro}>✕</button></td>
     </tr>`).join('');
@@ -2187,9 +2195,9 @@ function renderSettings() {
   </div>
   <section class="panel">
     <h3>Turnos</h3>
-    <p>Horário de cada turno. Não há quotas por turno: de segunda a sexta a geração distribui a equipa pelos turnos para manter um número parecido de pessoas ao balcão ao longo do dia; ao sábado escala só as pessoas indicadas abaixo; ao domingo só trabalha o plantão, quando calha nesse dia. «Só no plantão» reserva o turno para o dia de plantão. As horas mostram o tempo que conta como trabalhado e o que são horas nocturnas, pagas à parte.</p>
+    <p>Horário de cada turno. Não há quotas por turno: de segunda a sexta a geração distribui a equipa pelos turnos para manter um número parecido de pessoas ao balcão ao longo do dia; ao sábado escala só as pessoas indicadas abaixo; ao domingo só trabalha o plantão, quando calha nesse dia. «Só no plantão» reserva o turno para o dia de plantão. «Backoffice» marca um horário fixo de backoffice (ex.: 09:00–17:30): nunca é usado ao balcão, não é cortado ao horário de abertura e quem o faz entra logo em backoffice — atribui-o como turno fixo na ficha de quem é de backoffice. As horas mostram o tempo que conta como trabalhado e o que são horas nocturnas, pagas à parte.</p>
     <div class="cfg-wrap"><table class="cfg">
-      <thead><tr><th>Nome</th><th>Abrev.</th><th>Início</th><th>Fim</th><th class="c">Almoço</th><th class="c">Noturno</th><th class="c">Só no plantão</th><th>Horas</th><th></th></tr></thead>
+      <thead><tr><th>Nome</th><th>Abrev.</th><th>Início</th><th>Fim</th><th class="c">Almoço</th><th class="c">Noturno</th><th class="c">Só no plantão</th><th class="c">Backoffice</th><th>Horas</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
     <div style="margin-top:12px"><button class="btn" data-action="cfg-add" ${ro}>Adicionar turno</button></div>
@@ -2386,7 +2394,9 @@ function openMenu(btn) {
       ${cur?.hrs ? '<button class="lchip" data-action="extra-hours" data-clear="1">Retirar</button>' : ''}
     </div></div>`;
   }
-  const opts = (e.extra ? [null] : [...sortedShifts().map(x => shiftOn(x, d)), null]).map(sh => {
+  /* Horários de backoffice só aparecem a quem é de backoffice (ou se já for o turno da célula). */
+  const menuShifts = sortedShifts().filter(x => !x.back || e.backoffice || cur?.sh?.id === x.id);
+  const opts = (e.extra ? [null] : [...menuShifts.map(x => shiftOn(x, d)), null]).map(sh => {
     const iss = sh ? cellIssues(e, id, wk, d, { s: sh.id, sh, l: cur?.sh?.id === sh.id ? cur.l : '' }, getCell, true).filter(i => i.msg !== 'Sem hora de almoço marcada') : [];
     const w = worstOf(iss), isCur = sh ? cur?.sh?.id === sh.id : !cur || (!cur.sh && !cur.hrs && !cur.bank && !cur.vac && !cur.sick && !cur.xoff);
     const h = sh ? hoursOf(sh, '') : null;
@@ -2485,7 +2495,8 @@ function setShift(id, d, sid) {
   if (sh?.lunch) v.l = cur?.sh?.id === sid && cur.l ? cur.l : pickLunch(sh, lunchesOn(state.week, d, id));
   if (cur?.pay === 'bank' && d === dutyDay(state.week)) v.pay = 'bank';
   /* Quem é de backoffice por defeito entra logo em backoffice (menos na noite de serviço). */
-  if (cur?.sh ? cur.post === 'back' : state.employees[id]?.backoffice && !sh?.night) v.post = 'back';
+  if (cur?.sh ? cur.post === 'back' : (state.employees[id]?.backoffice || sh?.back) && !sh?.night) v.post = 'back';
+  if (sh?.back) v.post = 'back';
   writeCell(id, d, v);
 }
 function setLunch(id, d, l) {
@@ -2652,6 +2663,7 @@ function buildShiftFields(e) {
   const list = sortedShifts();
   $('#emp-pref').innerHTML = list.map(s => `<label class="chip"><input type="checkbox" id="emp-pref-${esc(s.id)}" value="${esc(s.id)}" ${(e.preferred || []).map(normId).includes(s.id) ? 'checked' : ''}><span><i class="dot ${toneOf(s)}"></i>${esc(s.name)} · ${s.start}–${s.end}</span></label>`).join('');
   $('#emp-fixed').innerHTML = DAYS.map((d, i) => `<label for="emp-fix-${i}">${d}<select id="emp-fix-${i}"><option value="">—</option>${list.map(s => `<option value="${esc(s.id)}" ${normId(e.fixed?.[i]) === s.id ? 'selected' : ''}>${esc(s.short)}</option>`).join('')}</select></label>`).join('');
+  $('#emp-fix-all').innerHTML = list.map(s => `<option value="${esc(s.id)}" ${s.back ? 'selected' : ''}>${esc(s.name)} · ${s.start}–${s.end}${s.back ? ' · backoffice' : ''}</option>`).join('');
   const nights = list.filter(s => s.night);
   $('#emp-night-hint').textContent = nights.length ? `Aceita fazer ${nights.map(s => `${s.name.toLowerCase()} (${s.start}–${s.end})`).join(', ')}` : 'Não há turnos noturnos definidos';
 }
@@ -2914,10 +2926,12 @@ document.addEventListener('click', async ev => {
     case 'edit': openEditor(el.dataset.id); break;
     case 'delete': deleteEmployee(el.dataset.id); break;
     case 'close-editor': editor.close(); break;
+    case 'fix-weekdays': { const v = $('#emp-fix-all').value; for (let i = 0; i < 5; i++) $('#emp-fix-' + i).value = v; updateEditorWarn(); break; }
+    case 'fix-clear': { for (let i = 0; i < 7; i++) $('#emp-fix-' + i).value = ''; updateEditorWarn(); break; }
     case 'delete-from-editor': { const id = editingId; editor.close(); if (id) deleteEmployee(id); break; }
     case 'cfg-add': {
       const c = draft();
-      c.shifts.push({ id: newId('s'), name: 'Novo turno', short: 'T' + (c.shifts.length + 1), start: '09:00', end: '18:00', lunch: true, night: false, onlyDuty: false, weekday: 0, weekend: 0, saturday: 0 });
+      c.shifts.push({ id: newId('s'), name: 'Novo turno', short: 'T' + (c.shifts.length + 1), start: '09:00', end: '18:00', lunch: true, night: false, onlyDuty: false, weekday: 0, weekend: 0, saturday: 0, back: false });
       state.cfgDirty = true; render();
       const f = document.getElementById(`cfg-${c.shifts.length - 1}-name`); if (f) { f.focus(); f.select(); }
       break;

@@ -211,6 +211,9 @@ exportação e importação em JSON.
   não trabalha ao sábado nem ao domingo.
 - **Backoffice por defeito**: na ficha, marca quem trabalha sempre em backoffice. Os
   turnos dessa pessoa entram logo nesse posto e ela não é escalada ao fim de semana.
+  Para lhe dar um **horário fixo** (ex.: 09:00–17:30), cria em *Turnos* um turno com a
+  opção **Backoffice** (nunca é usado ao balcão nem cortado ao horário de abertura) e,
+  na ficha, aplica-o de segunda a sexta com o botão *Aplicar de seg. a sex.*
 - **Extras**: na ficha, marca quem é *extra*. Não tem turnos nem mínimo semanal e a
   geração automática não a escala; em cada dia indicas no menu da célula quantas horas
   fez e, se quiseres, a que horas entrou (para contar no gráfico do balcão). As horas
