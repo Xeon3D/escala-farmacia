@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS shifts (
   only_duty INTEGER NOT NULL DEFAULT 0,
   weekday   INTEGER NOT NULL DEFAULT 0,
   weekend   INTEGER NOT NULL DEFAULT 0,
+  saturday  INTEGER,
   position  INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS assignments (
@@ -190,6 +191,7 @@ def migrate() -> None:
                         "hrs": "REAL NOT NULL DEFAULT 0", "start": "TEXT NOT NULL DEFAULT ''",
                         "less": "REAL NOT NULL DEFAULT 0"},
         "users": {"avatar": "TEXT NOT NULL DEFAULT ''"},
+        "shifts": {"saturday": "INTEGER"},
     }
     with lock:
         for table, columns in additions.items():
@@ -650,7 +652,7 @@ def read_state() -> dict:
             {
                 "id": r["id"], "name": r["name"], "short": r["short"], "start": r["start"], "end": r["end"],
                 "lunch": bool(r["lunch"]), "night": bool(r["night"]), "onlyDuty": bool(r["only_duty"]),
-                "weekday": r["weekday"], "weekend": r["weekend"],
+                "weekday": r["weekday"], "weekend": r["weekend"], "saturday": r["saturday"],
             }
             for r in conn.execute("SELECT * FROM shifts ORDER BY position, start")
         ]
@@ -783,12 +785,13 @@ def save_config(cfg: dict) -> None:
             if not ID_RE.match(sid):
                 continue
             conn.execute(
-                "INSERT OR REPLACE INTO shifts (id,name,short,start,end,lunch,night,only_duty,weekday,weekend,position)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT OR REPLACE INTO shifts (id,name,short,start,end,lunch,night,only_duty,weekday,weekend,saturday,position)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (sid, str(s.get("name", ""))[:60], str(s.get("short", ""))[:8],
                  str(s.get("start", "09:00"))[:5], str(s.get("end", "18:00"))[:5],
                  int(bool(s.get("lunch"))), int(bool(s.get("night"))), int(bool(s.get("onlyDuty"))),
-                 max(0, int(s.get("weekday") or 0)), max(0, int(s.get("weekend") or 0)), i),
+                 max(0, int(s.get("weekday") or 0)), max(0, int(s.get("weekend") or 0)),
+                 None if s.get("saturday") in (None, "") else max(0, int(s.get("saturday") or 0)), i),
             )
         for k in DEFAULT_SETTINGS:
             if k not in cfg:
