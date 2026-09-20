@@ -44,10 +44,10 @@ ID_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,60}$")
 WEEK_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 DEFAULT_SHIFTS = [
-    {"id": "s9",  "name": "Abertura",         "short": "9h",  "start": "09:00", "end": "18:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 1, "weekend": 2},
-    {"id": "s10", "name": "Intermédio",       "short": "10h", "start": "10:00", "end": "19:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 1, "weekend": 0},
-    {"id": "s11", "name": "Fecho",            "short": "11h", "start": "11:00", "end": "20:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 2, "weekend": 1},
-    {"id": "N",   "name": "Noite de serviço", "short": "N",   "start": "19:00", "end": "07:00", "lunch": False, "night": True,  "onlyDuty": True,  "weekday": 1, "weekend": 1},
+    {"id": "s9",  "name": "Abertura",         "short": "9h",  "start": "09:00", "end": "18:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 1, "weekend": 2, "saturday": 2},
+    {"id": "s10", "name": "Intermédio",       "short": "10h", "start": "10:00", "end": "19:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 1, "weekend": 0, "saturday": 0},
+    {"id": "s11", "name": "Fecho",            "short": "11h", "start": "11:00", "end": "20:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 2, "weekend": 1, "saturday": 1},
+    {"id": "N",   "name": "Noite de serviço", "short": "N",   "start": "19:00", "end": "07:00", "lunch": False, "night": True,  "onlyDuty": True,  "weekday": 1, "weekend": 1, "saturday": 1},
 ]
 
 DEFAULT_SETTINGS = {
@@ -209,10 +209,10 @@ def init_data() -> None:
         if not conn.execute("SELECT 1 FROM shifts LIMIT 1").fetchone():
             for i, s in enumerate(DEFAULT_SHIFTS):
                 conn.execute(
-                    "INSERT INTO shifts (id,name,short,start,end,lunch,night,only_duty,weekday,weekend,position)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO shifts (id,name,short,start,end,lunch,night,only_duty,weekday,weekend,saturday,position)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                     (s["id"], s["name"], s["short"], s["start"], s["end"], int(s["lunch"]),
-                     int(s["night"]), int(s["onlyDuty"]), s["weekday"], s["weekend"], i),
+                     int(s["night"]), int(s["onlyDuty"]), s["weekday"], s["weekend"], s["saturday"], i),
                 )
         for k, v in DEFAULT_SETTINGS.items():
             conn.execute("INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)", (k, json.dumps(v)))

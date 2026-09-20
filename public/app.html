@@ -588,10 +588,10 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
 /* ---------- Configuração predefinida ---------- */
 const DEFAULT_CONFIG = {
   shifts: [
-    { id: 's9',  name: 'Abertura',         short: '9h',  start: '09:00', end: '18:00', lunch: true,  night: false, onlyDuty: false, weekday: 1, weekend: 2 },
-    { id: 's10', name: 'Intermédio',       short: '10h', start: '10:00', end: '19:00', lunch: true,  night: false, onlyDuty: false, weekday: 1, weekend: 0 },
-    { id: 's11', name: 'Fecho',            short: '11h', start: '11:00', end: '20:00', lunch: true,  night: false, onlyDuty: false, weekday: 2, weekend: 1 },
-    { id: 'N',   name: 'Noite de serviço', short: 'N',   start: '19:00', end: '07:00', lunch: false, night: true,  onlyDuty: true,  weekday: 1, weekend: 1 },
+    { id: 's9',  name: 'Abertura',         short: '9h',  start: '09:00', end: '18:00', lunch: true,  night: false, onlyDuty: false, weekday: 1, weekend: 2, saturday: 2 },
+    { id: 's10', name: 'Intermédio',       short: '10h', start: '10:00', end: '19:00', lunch: true,  night: false, onlyDuty: false, weekday: 1, weekend: 0, saturday: 0 },
+    { id: 's11', name: 'Fecho',            short: '11h', start: '11:00', end: '20:00', lunch: true,  night: false, onlyDuty: false, weekday: 2, weekend: 1, saturday: 1 },
+    { id: 'N',   name: 'Noite de serviço', short: 'N',   start: '19:00', end: '07:00', lunch: false, night: true,  onlyDuty: true,  weekday: 1, weekend: 1, saturday: 1 },
   ],
   lunchFrom: '12:00', lunchTo: '16:00', lunchMin: 60, minPresent: 3, minRest: 11,
   doubleFrom: '22:00', doubleTo: '09:00', doubleFactor: 2,
@@ -760,12 +760,12 @@ function openingSummary() {
   return groups.map(g => `${DAYS[g.from]}${g.to > g.from ? '–' + DAYS[g.to] : ''} ${g.k}`).join(' · ');
 }
 
+const satOf = sh => (sh.saturday === '' || sh.saturday === null || sh.saturday === undefined ? sh.weekend : sh.saturday);
 function needFor(sh, d, wk) {
   if (sh.onlyDuty && d !== dutyDay(wk)) return 0;
   if (!shiftFits(sh, d)) return 0;
-  /* Sábado pode ter um valor próprio; em branco usa o de fim de semana. */
-  const sat = sh.saturday === '' || sh.saturday === null || sh.saturday === undefined ? null : +sh.saturday;
-  return Math.max(0, +(d === 5 && sat !== null ? sat : d >= 5 ? sh.weekend : sh.weekday) || 0);
+  /* «weekend» é o domingo; configurações antigas sem valor de sábado usam o mesmo. */
+  return Math.max(0, +(d === 5 ? satOf(sh) : d === 6 ? sh.weekend : sh.weekday) || 0);
 }
 const sortedShifts = () => cfg().shifts.slice().sort((a, b) => (a.night - b.night) || toMin(a.start) - toMin(b.start));
 
@@ -1589,7 +1589,7 @@ function renderSchedule() {
   const ro = state.readOnly ? 'disabled' : '';
   const shiftsTxt = sortedShifts().map(s => {
     const h = hoursOf(s, '');
-    return `<dt><span class="dot ${toneOf(s)}"></span> ${esc(s.name)}</dt><dd>${s.start}–${s.end} · ${h.dbl ? `${fmtH(h.normal)} h trabalhadas + ${fmtH(h.dbl)} h nocturnas` : `${fmtH(h.work)} h`}${s.onlyDuty ? ' · só no dia de plantão' : ` · Seg–Sex ${s.weekday || 0}, ${s.saturday !== null && s.saturday !== undefined && s.saturday !== '' ? `Sáb ${+s.saturday}, Dom ${s.weekend || 0}` : `Sáb–Dom ${s.weekend || 0}`}`}</dd>`;
+    return `<dt><span class="dot ${toneOf(s)}"></span> ${esc(s.name)}</dt><dd>${s.start}–${s.end} · ${h.dbl ? `${fmtH(h.normal)} h trabalhadas + ${fmtH(h.dbl)} h nocturnas` : `${fmtH(h.work)} h`}${s.onlyDuty ? ' · só no dia de plantão' : ` · Seg–Sex ${s.weekday || 0}, Sáb ${+satOf(s) || 0}, Dom ${s.weekend || 0}`}</dd>`;
   }).join('');
 
   return `
@@ -1861,8 +1861,8 @@ function renderSettings() {
       <td class="c"><input type="checkbox" id="cfg-${i}-night" data-cfg="shift" data-i="${i}" data-k="night" ${s.night ? 'checked' : ''} aria-label="Turno noturno" ${ro}></td>
       <td class="c"><input type="checkbox" id="cfg-${i}-onlyDuty" data-cfg="shift" data-i="${i}" data-k="onlyDuty" ${s.onlyDuty ? 'checked' : ''} aria-label="Só no dia de plantão" ${ro}></td>
       <td><input type="number" id="cfg-${i}-weekday" data-cfg="shift" data-i="${i}" data-k="weekday" value="${+s.weekday || 0}" min="0" max="20" aria-label="Pessoas de segunda a sexta" ${ro}></td>
-      <td><input type="number" id="cfg-${i}-weekend" data-cfg="shift" data-i="${i}" data-k="weekend" value="${+s.weekend || 0}" min="0" max="20" aria-label="Pessoas ao fim de semana" ${ro}></td>
-      <td><input type="number" id="cfg-${i}-saturday" data-cfg="shift" data-i="${i}" data-k="saturday" value="${s.saturday === null || s.saturday === undefined || s.saturday === '' ? '' : +s.saturday}" min="0" max="20" placeholder="—" aria-label="Pessoas ao sábado (substitui o valor de fim de semana)" title="Em branco usa o valor de Sáb–Dom" ${ro}></td>
+      <td><input type="number" id="cfg-${i}-saturday" data-cfg="shift" data-i="${i}" data-k="saturday" value="${+satOf(s) || 0}" min="0" max="20" aria-label="Pessoas ao sábado" ${ro}></td>
+      <td><input type="number" id="cfg-${i}-weekend" data-cfg="shift" data-i="${i}" data-k="weekend" value="${+s.weekend || 0}" min="0" max="20" aria-label="Pessoas ao domingo" ${ro}></td>
       <td class="hrs" id="cfg-hrs-${i}">${validTime(s.start) && validTime(s.end) ? shiftHoursLabel(s, c) : '—'}</td>
       <td><button class="btn danger icon" data-action="cfg-remove" data-i="${i}" aria-label="Remover turno ${esc(s.name)}" ${ro}>✕</button></td>
     </tr>`).join('');
@@ -1894,9 +1894,9 @@ function renderSettings() {
   </div>
   <section class="panel">
     <h3>Turnos</h3>
-    <p>Horário de cada turno e quantas pessoas são precisas. «Só sáb.» é opcional: se preenchido, substitui ao sábado o valor de Sáb–Dom. «Só no plantão» reserva o turno para o único dia de plantão da semana. As horas mostram o tempo que conta como trabalhado e o que são horas nocturnas, pagas à parte.</p>
+    <p>Horário de cada turno e quantas pessoas são precisas. «Só no plantão» reserva o turno para o único dia de plantão da semana. As horas mostram o tempo que conta como trabalhado e o que são horas nocturnas, pagas à parte.</p>
     <div class="cfg-wrap"><table class="cfg">
-      <thead><tr><th>Nome</th><th>Abrev.</th><th>Início</th><th>Fim</th><th class="c">Almoço</th><th class="c">Noturno</th><th class="c">Só no plantão</th><th>Seg–Sex</th><th>Sáb–Dom</th><th>Só sáb.</th><th>Horas</th><th></th></tr></thead>
+      <thead><tr><th>Nome</th><th>Abrev.</th><th>Início</th><th>Fim</th><th class="c">Almoço</th><th class="c">Noturno</th><th class="c">Só no plantão</th><th>Seg–Sex</th><th>Sáb</th><th>Dom</th><th>Horas</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
     <div style="margin-top:12px"><button class="btn" data-action="cfg-add" ${ro}>Adicionar turno</button></div>
@@ -2564,7 +2564,7 @@ document.addEventListener('click', async ev => {
     case 'delete-from-editor': { const id = editingId; editor.close(); if (id) deleteEmployee(id); break; }
     case 'cfg-add': {
       const c = draft();
-      c.shifts.push({ id: newId('s'), name: 'Novo turno', short: 'T' + (c.shifts.length + 1), start: '09:00', end: '18:00', lunch: true, night: false, onlyDuty: false, weekday: 0, weekend: 0, saturday: null });
+      c.shifts.push({ id: newId('s'), name: 'Novo turno', short: 'T' + (c.shifts.length + 1), start: '09:00', end: '18:00', lunch: true, night: false, onlyDuty: false, weekday: 0, weekend: 0, saturday: 0 });
       state.cfgDirty = true; render();
       const f = document.getElementById(`cfg-${c.shifts.length - 1}-name`); if (f) { f.focus(); f.select(); }
       break;
@@ -2624,7 +2624,7 @@ document.addEventListener('click', async ev => {
         s.name = String(s.name).trim(); s.short = String(s.short || '').trim();
         s.start = normalizeTime(s.start); s.end = normalizeTime(s.end);
         s.weekday = Math.max(0, +s.weekday || 0); s.weekend = Math.max(0, +s.weekend || 0);
-        s.saturday = s.saturday === '' || s.saturday === null || s.saturday === undefined ? null : Math.max(0, +s.saturday || 0);
+        s.saturday = Math.max(0, +satOf(s) || 0);
       });
       const w = cfgWarnings(c).list;
       if (w.length) { toast(w[0]); break; }
