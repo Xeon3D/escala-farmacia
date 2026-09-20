@@ -14,6 +14,7 @@
   --x-bg:#EDEDED; --x-ink:#555; --x-dot:#999;
   --bank-bg:#E2F1F2; --bank-ink:#12545C; --bank-dot:#2E8C97;
   --vac-bg:#EDE7DC; --vac-ink:#6B4F1D; --vac-dot:#B08A3E;
+  --sick-bg:#F3E3E6; --sick-ink:#7A2E3C; --sick-dot:#B85468;
   --off-dot:#B9C6C2;
   --bad:#B42318; --bad-bg:#FDE7E4; --warn:#A64B06; --warn-bg:#FEF1DC; --ok:#17804A; --ok-bg:#DEF3E6;
   --weekend:#EAF1EE; --duty:#F3ECFB; --overlay:rgba(12,22,19,.45);
@@ -34,6 +35,7 @@
     --x-bg:#2A2A2A; --x-ink:#BBB; --x-dot:#777;
     --bank-bg:#102E31; --bank-ink:#8FD3DB; --bank-dot:#3FA8B4;
     --vac-bg:#2E2617; --vac-ink:#DCC08A; --vac-dot:#C09B52;
+    --sick-bg:#33191F; --sick-ink:#E5A3B1; --sick-dot:#C46A7C;
     --off-dot:#4A5A55;
     --bad:#F58B80; --bad-bg:#3A1714; --warn:#F5B266; --warn-bg:#3A260E; --ok:#62D896; --ok-bg:#12301F;
     --weekend:#18231F; --duty:#211E33; --overlay:rgba(0,0,0,.6);
@@ -145,7 +147,17 @@ table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:980px}
 .cell.tone-x{background:var(--x-bg);color:var(--x-ink)}
 .cell.tone-bank{background:var(--bank-bg);color:var(--bank-ink);border:1px dashed var(--bank-dot)}
 .cell.tone-vac{background:var(--vac-bg);color:var(--vac-ink)}
+.cell.tone-extra{background:var(--surface-2);color:var(--ink);border:1px solid var(--line)}
+.dot.tone-extra{background:var(--ink-3)}
+.cell .pin.lesspin{left:auto;right:5px;top:2px;color:var(--warn);opacity:1;font-weight:600}
+.lunch-pick input[type=number],.lunch-pick input[type=text]{border:1px solid var(--line);background:var(--bg);border-radius:7px;padding:3px 6px;width:72px;font:12px var(--mono)}
+.mini.on{background:var(--accent);color:var(--on-accent)}
+.toggle.muted{opacity:.55}
+.changelog{margin:0 0 8px}.changelog ul{margin:4px 0 0;padding-left:18px}.changelog li{margin:2px 0}.facts .muted{color:var(--ink-3)}
 .dot.tone-vac{background:var(--vac-dot)}
+.cell.tone-sick{background:var(--sick-bg);color:var(--sick-ink)}
+.dot.tone-sick{background:var(--sick-dot)}
+.hours .sickcol{color:var(--sick-ink);font-family:var(--mono);font-size:13px}
 .cell.back{opacity:.92;border:1px dashed currentColor}
 .cell .pin.backpin{left:auto;right:5px;bottom:2px;top:auto;font-weight:600}
 .dot.tone-bank{background:var(--bank-dot)}
@@ -404,6 +416,13 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
         </div>
       </fieldset>
       <fieldset>
+        <legend class="legend-lbl">Tipo de posto</legend>
+        <div class="toggles">
+          <label class="toggle" for="emp-backoffice"><span><b>Backoffice por defeito</b><small>Os turnos ficam em backoffice. O backoffice não trabalha ao sábado nem ao domingo.</small></span><input type="checkbox" class="switch" id="emp-backoffice"></label>
+          <label class="toggle" for="emp-extra"><span><b>Extra</b><small>Sem turnos nem mínimo semanal: em cada dia indicas as horas que fez. A geração automática não a escala.</small></span><input type="checkbox" class="switch" id="emp-extra"></label>
+        </div>
+      </fieldset>
+      <fieldset>
         <legend class="legend-lbl">Turnos preferidos</legend>
         <div class="chips" id="emp-pref"></div>
         <p class="hint">A geração automática dá prioridade a estes turnos. Sem nenhum marcado, qualquer turno serve.</p>
@@ -474,9 +493,9 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
 
 <dialog id="vacdlg">
   <form class="dlg" id="vac-form" method="dialog">
-    <header><h2 id="vac-title">Férias</h2></header>
+    <header><h2 id="vac-title">Férias e baixas</h2></header>
     <div class="body">
-      <p style="margin:0;color:var(--ink-2);font-size:14px">Marca os dias de férias de uma só vez. Os dias de férias não contam para o mínimo semanal e a geração automática não atribui turnos nesses dias.</p>
+      <p style="margin:0;color:var(--ink-2);font-size:14px">Marca férias ou baixa médica de uma só vez. Esses dias não contam para o mínimo semanal e a geração automática não atribui turnos nesses dias.</p>
       <div class="row2">
         <div class="field"><label for="vac-from">De</label><input type="date" id="vac-from" required></div>
         <div class="field"><label for="vac-to">Até</label><input type="date" id="vac-to" required></div>
@@ -484,7 +503,8 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
       <div class="field"><label for="vac-mode">O que fazer</label>
         <select id="vac-mode">
           <option value="on">Marcar estes dias como férias</option>
-          <option value="off">Retirar as férias destes dias</option>
+          <option value="sick">Marcar estes dias como baixa médica</option>
+          <option value="off">Retirar férias e baixas destes dias</option>
         </select>
       </div>
       <div id="vac-warn"></div>
@@ -534,6 +554,8 @@ const DEFAULT_CONFIG = {
   weeklyHours: 40, dayHours: 8, backofficePerDay: 1,
   /* Horário normal da farmácia, de segunda (0) a domingo (6). «closed» marca o encerramento semanal. */
   opening: [...Array(7)].map(() => ({ open: '09:00', close: '20:00', closed: false })),
+  /* Períodos do dia em que o mínimo ao balcão é outro (ex.: 12:00–16:00 chegam 2 pessoas). */
+  presenceBands: [],
 };
 /* Códigos da primeira versão (Manhã/Tarde) lidos como os turnos atuais */
 const LEGACY = { M: 's9', T: 's11' };
@@ -861,20 +883,43 @@ function getCell(wk, id, d) {
   if (d > 6) { wk = shiftWeek(wk, 1); d -= 7; }
   const raw = state.schedules[wk]?.cells?.[id]?.[d];
   if (!raw) return null;
-  if (typeof raw === 'string') return raw ? { s: raw, sh: shiftById(raw), l: '', pay: '', bank: 0, post: '', vac: false } : null;
-  const s = raw.s || '', bank = +raw.bank || 0, vac = !!raw.vac;
-  if (!s && !bank && !vac) return null;
+  if (typeof raw === 'string') return raw ? { s: raw, sh: shiftById(raw), l: '', pay: '', bank: 0, post: '', vac: false, sick: false, hrs: 0, from: '', less: 0 } : null;
+  const s = raw.s || '', bank = +raw.bank || 0, vac = !!raw.vac, sick = !vac && !!raw.sick, hrs = s ? 0 : Math.max(0, +raw.hrs || 0);
+  if (!s && !bank && !vac && !sick && !hrs) return null;
   return {
-    s, sh: s ? shiftById(s) : null, l: raw.l || '', bank, vac,
+    s, sh: s ? shiftById(s) : null, l: raw.l || '', bank, vac, sick,
     pay: raw.pay === 'bank' ? 'bank' : '', post: raw.post === 'back' ? 'back' : '',
+    /* Extras: horas feitas nesse dia e, se souberes, a hora a que entrou. Turnos: horas a menos (chegou tarde / saiu cedo). */
+    hrs, from: validTime(raw.from) ? raw.from : '', less: s ? Math.max(0, +raw.less || 0) : 0,
   };
 }
-const isBackoffice = c => c?.sh && c.post === 'back';
+/** Horas de uma célula, já com as horas a menos de um turno ou as horas de um extra. */
+function cellHours(c) {
+  if (!c) return null;
+  if (c.sh) {
+    const h = hoursOf(c.sh, c.l);
+    if (!c.less) return h;
+    /* As horas a menos saem primeiro das normais; só depois das que contam a dobrar. */
+    const cut = Math.min(c.less, h.work), fromNormal = Math.min(cut, h.normal), fromDbl = cut - fromNormal;
+    const normal = h.normal - fromNormal, dbl = h.dbl - fromDbl, f = +cfg().doubleFactor || 2;
+    return { work: normal + dbl, normal, dbl, pay: normal + dbl * f, less: cut };
+  }
+  if (c.hrs) {
+    if (c.from) return hoursOf({ start: c.from, end: fmtMin(toMin(c.from) + Math.round(c.hrs * 60)), lunch: false }, '');
+    return { work: c.hrs, normal: c.hrs, dbl: 0, pay: c.hrs };
+  }
+  return null;
+}
+/** Intervalo de presença de um extra, se tiver hora de entrada. */
+const extraSpan = c => c?.hrs && c.from ? [toMin(c.from), toMin(c.from) + Math.round(c.hrs * 60)] : null;
+const worksOn = c => !!(c?.sh || c?.hrs);
+const isBackoffice = c => worksOn(c) && c.post === 'back';
 
 /* ---------- Banco de horas ---------- */
 const weeklyTarget = e => {
   const v = e.weeklyHours;
-  return v === undefined || v === null || v === '' ? (+cfg().weeklyHours || 0) : Math.max(0, +v || 0);
+  if (v === undefined || v === null || v === '') return e.extra ? 0 : (+cfg().weeklyHours || 0);
+  return Math.max(0, +v || 0);
 };
 const dayHours = () => Math.max(1, +cfg().dayHours || 8);
 /** Um desconto que cubra um dia inteiro equivale a uma folga paga pelo banco. */
@@ -883,26 +928,28 @@ const isFullDayOff = cell => !!cell && !cell.sh && cell.bank >= dayHours();
 /** Contas da semana de uma pessoa: horas feitas, pagas, creditadas e descontadas. */
 function weekStats(id, wk) {
   const e = state.employees[id];
-  const out = { turnos: 0, work: 0, pay: 0, dbl: 0, banked: 0, used: 0, dutyWork: 0, vac: 0, extraOff: 0 };
+  const out = { turnos: 0, work: 0, pay: 0, dbl: 0, banked: 0, used: 0, dutyWork: 0, vac: 0, sick: 0, extraOff: 0, less: 0 };
   const duty = dutyDay(wk);
   for (let d = 0; d < 7; d++) {
     const c = getCell(wk, id, d);
     if (!c) continue;
     if (c.vac) { out.vac++; continue; }
+    if (c.sick) { out.sick++; continue; }
     if (c.bank) out.used += c.bank;
-    if (!c.sh) continue;
+    if (!worksOn(c)) continue;
     out.turnos++;
-    const h = hoursOf(c.sh, c.l);
-    if (d === duty && c.pay === 'bank') {
+    const h = cellHours(c);
+    if (h.less) out.less += h.less;
+    if (c.sh && d === duty && c.pay === 'bank') {
       /* Para o banco só vão as horas normais: as das 22h às 9h são sempre pagas à parte. */
       out.banked += h.normal; out.dutyWork += h.normal;
       out.work += h.dbl; out.dbl += h.dbl; out.pay += h.pay - h.normal;
     } else { out.work += h.work; out.pay += h.pay; out.dbl += h.dbl; }
     /* A noite de serviço ao fim de semana dá um dia de folga extra, creditado no banco. */
-    if (c.sh.night && d >= 5) { out.extraOff++; out.banked += dayHours(); }
+    if (c.sh?.night && d >= 5) { out.extraOff++; out.banked += dayHours(); }
   }
   /* Cada dia de férias desconta um dia de trabalho ao mínimo da semana. */
-  out.target = Math.max(0, weeklyTarget(e) - out.vac * dayHours());
+  out.target = Math.max(0, weeklyTarget(e) - (out.vac + out.sick) * dayHours());
   out.credited = out.work + out.used;             // conta para o mínimo semanal
   out.missing = Math.max(0, out.target - out.credited);
   return out;
@@ -937,8 +984,8 @@ function cellIssues(e, id, wk, d, cell, lookup = getCell, both = false) {
   const out = [];
   if (!cell) return out;
   const C = cfg(), sh = cell.sh;
-  if (cell.vac) {
-    if (sh) out.push({ lvl: 'bad', msg: 'Está de férias neste dia' });
+  if (cell.vac || cell.sick) {
+    if (sh) out.push({ lvl: 'bad', msg: cell.vac ? 'Está de férias neste dia' : 'Está de baixa neste dia' });
     return out;
   }
   if (!sh && cell.bank) {
@@ -948,7 +995,16 @@ function cellIssues(e, id, wk, d, cell, lookup = getCell, both = false) {
     if ((e.daysOff || []).includes(d)) out.push({ lvl: 'info', msg: 'Dia marcado como indisponível' });
     return out;
   }
+  if (!sh && cell.hrs) {
+    if (!e.extra) out.push({ lvl: 'warn', msg: 'Horas avulsas numa pessoa que não está marcada como extra' });
+    if ((e.daysOff || []).includes(d)) out.push({ lvl: 'info', msg: 'Dia marcado como indisponível' });
+    if (isClosed(d, wk)) out.push({ lvl: 'warn', msg: 'A farmácia está fechada neste dia' });
+    return out;
+  }
   if (!sh) { out.push({ lvl: 'bad', msg: 'Este turno já não existe — escolhe outro' }); return out; }
+  if (e.backoffice && d >= 5) out.push({ lvl: 'bad', msg: 'O backoffice não trabalha ao sábado nem ao domingo' });
+  else if (cell.post === 'back' && d >= 5) out.push({ lvl: 'warn', msg: 'O backoffice não trabalha ao fim de semana' });
+  if (e.extra) out.push({ lvl: 'info', msg: 'Pessoa extra com um turno completo — podes antes indicar só as horas que fez' });
   if (cell.pay === 'bank' && d !== dutyDay(wk)) out.push({ lvl: 'warn', msg: 'Só as horas do dia de plantão podem ir para o banco' });
   if (isClosed(d, wk)) out.push({ lvl: 'warn', msg: 'A farmácia está fechada neste dia' });
   if (cell.post === 'back' && sh.night) out.push({ lvl: 'warn', msg: 'A noite de serviço não é trabalho de backoffice' });
@@ -1006,6 +1062,17 @@ function lunchesOn(wk, d, exceptId) {
 }
 
 /* ---------- Presença ao balcão ---------- */
+/** Mínimo de pessoas ao balcão a uma dada hora (em minutos), tendo em conta os períodos com outro mínimo. */
+function minAt(t) {
+  const C = cfg(), tt = ((t % 1440) + 1440) % 1440;
+  for (const b of (Array.isArray(C.presenceBands) ? C.presenceBands : [])) {
+    if (!validTime(b.from) || !validTime(b.to)) continue;
+    const a = toMin(b.from), z = toMin(b.to);
+    const dentro = a < z ? (tt >= a && tt < z) : (tt >= a || tt < z);
+    if (dentro) return Math.max(0, +b.min || 0);
+  }
+  return Math.max(0, +C.minPresent || 0);
+}
 function presence(wk, d, ids) {
   const C = cfg();
   if (isClosed(d, wk)) return null;
@@ -1015,21 +1082,27 @@ function presence(wk, d, ids) {
   for (const id of ids) {
     const c = getCell(wk, id, d), p = getCell(wk, id, d - 1);
     if (c?.sh) { const [s, e] = span(c.sh); ranges.push({ s, e, l: c.sh.lunch && c.l ? toMin(c.l) : null, back: c.post === 'back' }); }
+    else if (extraSpan(c)) { const [s, e] = extraSpan(c); ranges.push({ s, e, l: null, back: c.post === 'back' }); }
     if (p?.sh) { const [s, e] = span(p.sh); if (e > 1440) ranges.push({ s: s - 1440, e: e - 1440, l: null, back: p.post === 'back' }); }
   }
   const presentes = t => ranges.filter(r => r.s <= t && t < r.e && !(r.l !== null && r.l <= t && t < r.l + C.lunchMin));
   const slots = [];
   for (let t = from; t < to; t += 30) {
     const aqui = presentes(t);
-    slots.push({ t, n: aqui.filter(r => !r.back).length, back: aqui.filter(r => r.back).length });
+    slots.push({ t, n: aqui.filter(r => !r.back).length, back: aqui.filter(r => r.back).length, min: minAt(t) });
   }
   return { from, to, slots };
 }
 
 /* ---------- Geração automática ---------- */
 function generate(wk) {
-  const ids = sortedIds();
-  const cells = {}; ids.forEach(id => { cells[id] = {}; });
+  const all = sortedIds();
+  /* Os extras não entram na geração: as horas deles marcam-se à mão, dia a dia. */
+  const ids = all.filter(id => !state.employees[id].extra);
+  const cells = {}; all.forEach(id => { cells[id] = {}; });
+  all.filter(id => state.employees[id].extra).forEach(id => {
+    for (let d = 0; d < 7; d++) { const c = getCell(wk, id, d); if (c) cells[id][d] = cellRaw(c); }
+  });
   const lookup = (w, id, d) => {
     if (w !== wk || d < 0 || d > 6) return getCell(w, id, d);
     const r = cells[id]?.[d];
@@ -1042,6 +1115,7 @@ function generate(wk) {
     for (let d = 0; d < 7; d++) {
       const c = getCell(wk, id, d);
       if (c?.vac) cells[id][d] = { vac: true };
+      else if (c?.sick) cells[id][d] = { sick: true };
       else if (c && !c.sh && c.bank) { cells[id][d] = { bank: c.bank }; hours[id] += c.bank; }
     }
   });
@@ -1054,6 +1128,7 @@ function generate(wk) {
   const put = (id, d, sid) => {
     const sh = shiftById(sid);
     cells[id][d] = { s: sid }; count[id]++; hours[id] += hoursOf(sh, '').work;
+    if (state.employees[id].backoffice && !sh.night) cells[id][d].post = 'back';
     if (sh.night) nights[id]++;
   };
 
@@ -1081,13 +1156,14 @@ function generate(wk) {
         put(cands[0], d, sh.id); have++;
       }
     }
-    /* Uma pessoa por dia (ou o que estiver definido) fica em backoffice. */
-    const backAlvo = Math.max(0, +cfg().backofficePerDay || 0);
+    /* Uma pessoa por dia (ou o que estiver definido) fica em backoffice — só de segunda a sexta. */
+    const jaBack = ids.filter(id => cells[id][d]?.post === 'back').length;
+    const backAlvo = d < 5 ? Math.max(0, (+cfg().backofficePerDay || 0) - jaBack) : 0;
     if (backAlvo) {
       /* Nunca em quem faz a noite de serviço; entre os outros, quem entra mais tarde. */
       const doDia = ids.filter(id => {
         const sh = shiftById(cells[id][d]?.s);
-        return sh && !sh.night && !sh.onlyDuty;
+        return sh && !sh.night && !sh.onlyDuty && cells[id][d].post !== 'back';
       }).sort((a, b) => toMin(shiftById(cells[b][d].s).start) - toMin(shiftById(cells[a][d].s).start));
       doDia.slice(0, Math.min(backAlvo, Math.max(0, doDia.length - Math.max(0, +cfg().minPresent || 0))))
         .forEach(id => { cells[id][d].post = 'back'; });
@@ -1195,7 +1271,7 @@ function renderUsers() {
 }
 
 function personHTML(e, compact) {
-  return `<div class="person"><span class="avatar" style="background:${esc(e.color || COLORS[0])}">${esc(initials(e.name))}</span><span><b>${esc(e.name)}</b><small>${esc(e.role || '—')}</small>${compact ? `<span class="flags"><span class="mini ${e.acceptsNight ? '' : 'no'}" title="${e.acceptsNight ? 'Aceita' : 'Não aceita'} noites">noite</span><span class="mini ${e.acceptsWeekend ? '' : 'no'}" title="${e.acceptsWeekend ? 'Aceita' : 'Não aceita'} fins de semana">fds</span></span>` : ''}</span></div>`;
+  return `<div class="person"><span class="avatar" style="background:${esc(e.color || COLORS[0])}">${esc(initials(e.name))}</span><span><b>${esc(e.name)}</b><small>${esc(e.role || '—')}</small>${compact ? `<span class="flags"><span class="mini ${e.acceptsNight ? '' : 'no'}" title="${e.acceptsNight ? 'Aceita' : 'Não aceita'} noites">noite</span><span class="mini ${e.acceptsWeekend && !e.backoffice ? '' : 'no'}" title="${e.acceptsWeekend && !e.backoffice ? 'Aceita' : 'Não aceita'} fins de semana">fds</span>${e.backoffice ? '<span class="mini on" title="Backoffice por defeito">back</span>' : ''}${e.extra ? '<span class="mini on" title="Extra: horas marcadas dia a dia">extra</span>' : ''}</span>` : ''}</span></div>`;
 }
 
 function renderSchedule() {
@@ -1214,8 +1290,10 @@ function renderSchedule() {
       const c = getCell(wk, id, d), iss = cellIssues(e, id, wk, d, c), worst = worstOf(iss);
       iss.filter(i => i.lvl !== 'info').forEach(i => alerts.push({ lvl: i.lvl, who: e.name, when: `${DAYS[d]} ${days[d].getDate()}`, msg: i.msg }));
       const desc = c
-        ? (c.sh ? `${c.sh.name} ${c.sh.start}–${c.sh.end}${c.l ? `, almoço ${c.l}` : ''}${c.pay === 'bank' ? ', horas para o banco' : ''}`
-          : c.bank ? `desconto de ${fmtH(c.bank)} h do banco${isFullDayOff(c) ? ' (folga)' : ''}` : 'turno removido')
+        ? (c.sh ? `${c.sh.name} ${c.sh.start}–${c.sh.end}${c.l ? `, almoço ${c.l}` : ''}${c.less ? `, menos ${fmtH(c.less)} h` : ''}${c.pay === 'bank' ? ', horas para o banco' : ''}`
+          : c.hrs ? `${fmtH(c.hrs)} h como extra${c.from ? ` a partir das ${c.from}` : ''}`
+          : c.bank ? `desconto de ${fmtH(c.bank)} h do banco${isFullDayOff(c) ? ' (folga)' : ''}`
+          : c.vac ? 'férias' : c.sick ? 'baixa médica' : 'turno removido')
         : 'folga';
       const label = `${e.name}, ${DAYS_LONG[d]}: ${desc}${iss.length ? ' — ' + iss.map(i => i.msg).join('; ') : ''}`;
       let tone = 'empty', inner = '<span>folga</span>';
@@ -1227,15 +1305,22 @@ function renderSchedule() {
       } else if (c?.vac) {
         tone = 'tone-vac';
         inner = '<b>Férias</b>';
+      } else if (c?.sick) {
+        tone = 'tone-sick';
+        inner = '<b>Baixa</b><span>médica</span>';
+      } else if (c?.hrs) {
+        tone = 'tone-extra' + (isBackoffice(c) ? ' back' : '');
+        const sp = extraSpan(c);
+        inner = `<b>${fmtH(c.hrs)} h</b><span>${sp ? `${fmtMin(sp[0])}–${fmtMin(sp[1])}` : 'extra'}</span>`;
       } else if (c?.bank) {
         tone = 'tone-bank';
         inner = `<b>−${fmtH(c.bank)} h</b><span>banco</span>${isFullDayOff(c) ? '<span class="lu">folga</span>' : ''}`;
       } else if (c) { tone = 'tone-x'; inner = '<b>?</b><span>removido</span>'; }
-      tds += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}"><button class="cell ${tone} ${worst && worst !== 'info' ? 'has-' + worst : ''}" data-action="cell" data-id="${esc(id)}" data-d="${d}" title="${esc(label)}" aria-label="${esc(label)}" aria-haspopup="menu" ${state.readOnly ? 'disabled' : ''}>${inner}${e.fixed?.[d] ? '<i class="pin">fixo</i>' : ''}${c?.pay === 'bank' ? '<i class="pin bankpin">banco</i>' : ''}${isBackoffice(c) ? '<i class="pin backpin">back</i>' : ''}${worst === 'bad' || worst === 'warn' ? '<i class="flag"></i>' : ''}</button></td>`;
+      tds += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}"><button class="cell ${tone} ${worst && worst !== 'info' ? 'has-' + worst : ''}" data-action="cell" data-id="${esc(id)}" data-d="${d}" title="${esc(label)}" aria-label="${esc(label)}" aria-haspopup="menu" ${state.readOnly ? 'disabled' : ''}>${inner}${e.fixed?.[d] ? '<i class="pin">fixo</i>' : ''}${c?.pay === 'bank' ? '<i class="pin bankpin">banco</i>' : ''}${isBackoffice(c) ? '<i class="pin backpin">back</i>' : ''}${c?.less ? `<i class="pin lesspin">−${fmtH(c.less)}h</i>` : ''}${worst === 'bad' || worst === 'warn' ? '<i class="flag"></i>' : ''}</button></td>`;
     }
     const max = e.maxPerWeek || 5, over = st.turnos > max;
     if (over) alerts.push({ lvl: 'warn', who: e.name, when: 'Semana', msg: `${st.turnos} turnos, acima do máximo de ${max}` });
-    if (st.missing > 0 && st.turnos + st.used > 0) {
+    if (st.missing > 0 && st.target > 0 && st.turnos + st.used > 0) {
       const saldoAntes = bankBefore(id, wk);
       alerts.push({
         lvl: 'warn', who: e.name, when: 'Semana',
@@ -1245,10 +1330,11 @@ function renderSchedule() {
     }
     totalWork += st.work; totalPay += st.pay;
     body += `<tr><th scope="row" class="emp">${personHTML(e, true)}</th>${tds}<td class="tot ${over || st.missing > 0 ? 'over' : ''}">` +
-      `<b>${fmtH(st.credited)}/${fmtH(st.target)} h</b><span>${st.turnos}/${max} turnos</span>` +
+      `<b>${st.target ? `${fmtH(st.credited)}/${fmtH(st.target)} h` : `${fmtH(st.credited)} h`}</b><span>${e.extra ? `${st.turnos} ${st.turnos === 1 ? 'dia' : 'dias'}` : `${st.turnos}/${max} turnos`}</span>` +
       (st.pay > st.work ? `<span class="pay">${fmtH(st.pay)} h a pagar</span>` : '') +
       (st.banked ? `<span class="bank">banco +${fmtH(st.banked)} h${st.extraOff ? ` (${st.extraOff === 1 ? 'folga extra' : st.extraOff + ' folgas extra'})` : ''}</span>` : '') +
       (st.used ? `<span class="bank used">banco −${fmtH(st.used)} h</span>` : '') +
+      (st.less ? `<span class="pay" style="color:var(--warn)">−${fmtH(st.less)} h a menos</span>` : '') +
       `<span class="saldo" title="Saldo do banco no fim desta semana">saldo ${fmtBank(saldoFim)}</span></td></tr>`;
   }
 
@@ -1275,21 +1361,23 @@ function renderSchedule() {
       const reforco = run.back ? ` — há ${run.back === 1 ? '1 pessoa' : `${run.back} pessoas`} em backoffice que pode reforçar` : '';
       alerts.push({
         lvl: run.back ? 'warn' : 'bad', who: 'Balcão', when: `${DAYS[d]} ${days[d].getDate()}`,
-        msg: `${fmtMin(run.a)}–${fmtMin(run.b)}: ${run.n === 0 ? 'ninguém' : run.n === 1 ? 'só 1 pessoa' : `só ${run.n} pessoas`} ao balcão (mínimo ${C.minPresent})${reforco}`,
+        msg: `${fmtMin(run.a)}–${fmtMin(run.b)}: ${run.n === 0 ? 'ninguém' : run.n === 1 ? 'só 1 pessoa' : `só ${run.n} pessoas`} ao balcão (mínimo ${run.min})${reforco}`,
       });
       run = null;
     };
     if (hasSched) p.slots.forEach(s => {
-      if (s.n < C.minPresent) {
+      if (s.n < s.min) {
+        if (run && run.min !== s.min) flush();
         if (run) { run.b = s.t + 30; run.n = Math.min(run.n, s.n); run.back = Math.min(run.back, s.back); }
-        else run = { a: s.t, b: s.t + 30, n: s.n, back: s.back };
+        else run = { a: s.t, b: s.t + 30, n: s.n, back: s.back, min: s.min };
       } else flush();
     });
     flush();
-    const bars = p.slots.map(s => `<i class="${s.n < C.minPresent ? 'low' : ''}" style="height:${Math.max(2, Math.round(s.n / maxN * 28))}px" title="${fmtMin(s.t)}: ${s.n} ao balcão${s.back ? ` + ${s.back} em backoffice` : ''}"><u style="height:${Math.round(s.back / maxN * 28)}px"></u></i>`).join('');
+    const bars = p.slots.map(s => `<i class="${s.n < s.min ? 'low' : ''}" style="height:${Math.max(2, Math.round(s.n / maxN * 28))}px" title="${fmtMin(s.t)}: ${s.n} ao balcão (mínimo ${s.min})${s.back ? ` + ${s.back} em backoffice` : ''}"><u style="height:${Math.round(s.back / maxN * 28)}px"></u></i>`).join('');
     presRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''}"><div class="pres" role="img" aria-label="Pessoas ao balcão entre ${fmtMin(p.from)} e ${fmtMin(p.to)}">${bars}</div><div class="pres-axis"><span>${fmtMin(p.from).slice(0, 2)}h</span><span>${fmtMin(p.to).slice(0, 2)}h</span></div></td>`;
   });
-  foot += `<tr><th scope="row">Ao balcão<small>por ½ hora · mín. ${C.minPresent}</small></th>${presRow}<td class="tot"></td></tr>`;
+  const bandsTxt = (C.presenceBands || []).filter(b => validTime(b.from) && validTime(b.to)).map(b => `${b.from}–${b.to} ${+b.min || 0}`).join(', ');
+  foot += `<tr><th scope="row">Ao balcão<small>por ½ hora · mín. ${C.minPresent}${bandsTxt ? ` (${bandsTxt})` : ''}</small></th>${presRow}<td class="tot"></td></tr>`;
 
   const backAlvo = Math.max(0, +C.backofficePerDay || 0);
   let backRow = '';
@@ -1314,6 +1402,13 @@ function renderSchedule() {
     vacRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''}">${n ? `<span class="cov extra">${n}</span>` : '<span class="cov none">—</span>'}</td>`;
   }
   if (vacTotal) foot += `<tr><th scope="row"><span class="dot tone-vac"></span>De férias</th>${vacRow}<td class="tot"></td></tr>`;
+  let sickRow = '', sickTotal = 0;
+  for (let d = 0; d < 7; d++) {
+    const n = ids.filter(id => getCell(wk, id, d)?.sick).length;
+    sickTotal += n;
+    sickRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''}">${n ? `<span class="cov extra">${n}</span>` : '<span class="cov none">—</span>'}</td>`;
+  }
+  if (sickTotal) foot += `<tr><th scope="row"><span class="dot tone-sick"></span>De baixa</th>${sickRow}<td class="tot"></td></tr>`;
 
   const bad = alerts.filter(a => a.lvl === 'bad').length, warn = alerts.length - bad;
   alerts.sort((a, b) => (a.lvl === b.lvl ? 0 : a.lvl === 'bad' ? -1 : 1));
@@ -1350,7 +1445,7 @@ function renderSchedule() {
     <span><b style="color:${bad ? 'var(--bad)' : 'var(--ok)'}">${bad}</b>conflitos</span>
     <span><b style="color:${warn ? 'var(--warn)' : 'var(--ink)'}">${warn}</b>avisos</span>
     <span class="sep"></span>
-    <span class="legend">${sortedShifts().map(s => `<span><i class="dot ${toneOf(s)}"></i>${esc(s.name)} <code>${s.start}–${s.end}</code></span>`).join('')}<span><i class="dot tone-off"></i>Almoço <code>${C.lunchFrom}–${C.lunchTo}</code></span><span><i class="dot tone-bank"></i>Folga do banco</span></span>
+    <span class="legend">${sortedShifts().map(s => `<span><i class="dot ${toneOf(s)}"></i>${esc(s.name)} <code>${s.start}–${s.end}</code></span>`).join('')}<span><i class="dot tone-off"></i>Almoço <code>${C.lunchFrom}–${C.lunchTo}</code></span><span><i class="dot tone-bank"></i>Folga do banco</span>${ids.some(id => state.employees[id].extra) ? '<span><i class="dot tone-extra"></i>Horas de extra</span>' : ''}</span>
   </div>
   <div class="grid-wrap">
     <table class="grid">
@@ -1372,10 +1467,11 @@ function renderSchedule() {
         <dt>Plantão</dt><dd>${DAYS_LONG[duty]} nesta semana; recua ${C.dutyStep === 1 ? 'um dia' : `${C.dutyStep} dias`} por semana</dd>
         <dt>Horas a dobrar</dt><dd>Entre ${C.doubleFrom} e ${C.doubleTo} cada hora conta ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}</dd>
         <dt>Almoço</dt><dd>${C.lunchMin} min, a começar entre ${C.lunchFrom} e ${fmtMin(toMin(C.lunchTo) - C.lunchMin)}</dd>
-        <dt>Balcão</dt><dd>Pelo menos ${C.minPresent} ${+C.minPresent === 1 ? 'pessoa' : 'pessoas'} durante o horário de abertura${+C.backofficePerDay ? `, mais ${C.backofficePerDay} em backoffice que pode reforçar` : ''}</dd>
-        <dt>Férias</dt><dd>Dias de férias não recebem turnos e descontam ${fmtH(dayHours())} h ao mínimo da semana</dd>
+        <dt>Balcão</dt><dd>Pelo menos ${C.minPresent} ${+C.minPresent === 1 ? 'pessoa' : 'pessoas'} durante o horário de abertura${bandsTxt ? ` (${bandsTxt})` : ''}${+C.backofficePerDay ? `, mais ${C.backofficePerDay} em backoffice que pode reforçar` : ''}</dd>
+        <dt>Férias e baixa</dt><dd>Dias de férias ou de baixa médica não recebem turnos e descontam ${fmtH(dayHours())} h ao mínimo da semana</dd>
         <dt>Descanso</dt><dd>Mínimo de ${C.minRest} h entre o fim de um turno e o início do seguinte</dd>
         <dt>Semana</dt><dd>${fmtH(+C.weeklyHours || 0)} h por pessoa, salvo valor próprio na ficha. Horas descontadas do banco contam para este mínimo</dd>
+        <dt>Backoffice</dt><dd>Não trabalha ao sábado nem ao domingo. Quem é de backoffice por defeito entra sempre nesse posto</dd>
         <dt>Noite de serviço</dt><dd>Folga obrigatória no dia seguinte. Ao sábado ou domingo dá ainda um dia de folga extra, creditado no banco (${fmtH(dayHours())} h)</dd>
         <dt>Banco de horas</dt><dd>No dia de plantão escolhes se as horas normais são pagas ou vão para o banco; as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte. Descontar ${fmtH(dayHours())} h num dia equivale a uma folga</dd>
       </dl>
@@ -1390,7 +1486,7 @@ function monthStats(monthKey) {
   const last = new Date(y, m, 0).getDate();
   const rows = {};
   sortedIds().forEach(id => {
-    rows[id] = { turnos: 0, noites: 0, fds: 0, work: 0, dbl: 0, normal: 0, pay: 0, banked: 0, used: 0, vac: 0, extraOff: 0, dias: [] };
+    rows[id] = { turnos: 0, noites: 0, fds: 0, work: 0, dbl: 0, normal: 0, pay: 0, banked: 0, used: 0, vac: 0, sick: 0, extraOff: 0, less: 0, dias: [] };
   });
   for (let day = 1; day <= last; day++) {
     const date = new Date(y, m - 1, day), wk = iso(mondayOf(date)), d = dayIndex(date);
@@ -1400,15 +1496,16 @@ function monthStats(monthKey) {
       if (!c) continue;
       const r = rows[id];
       if (c.vac) { r.vac++; continue; }
+      if (c.sick) { r.sick++; continue; }
       if (c.bank) r.used += c.bank;
-      if (!c.sh) continue;
-      const h = hoursOf(c.sh, c.l);
-      r.turnos++; if (c.sh.night) r.noites++; if (d >= 5) r.fds++;
-      r.work += h.work;
-      if (d === duty && c.pay === 'bank') { r.banked += h.normal; r.dbl += h.dbl; r.pay += h.pay - h.normal; }
+      if (!worksOn(c)) continue;
+      const h = cellHours(c);
+      r.turnos++; if (c.sh?.night) r.noites++; if (d >= 5) r.fds++;
+      r.work += h.work; if (h.less) r.less += h.less;
+      if (c.sh && d === duty && c.pay === 'bank') { r.banked += h.normal; r.dbl += h.dbl; r.pay += h.pay - h.normal; }
       else { r.dbl += h.dbl; r.normal += h.normal; r.pay += h.pay; }
-      if (c.sh.night && d >= 5) { r.extraOff++; r.banked += dayHours(); }
-      r.dias.push({ day, shift: c.sh.short });
+      if (c.sh?.night && d >= 5) { r.extraOff++; r.banked += dayHours(); }
+      r.dias.push({ day, shift: c.sh ? c.sh.short : `${fmtH(c.hrs)}h` });
     }
   }
   /* Saldo do banco no fim do mês */
@@ -1419,11 +1516,11 @@ function monthStats(monthKey) {
 function renderHours() {
   const [y, m] = state.month.split('-').map(Number);
   const rows = monthStats(state.month), ids = sortedIds();
-  const tot = { turnos: 0, noites: 0, fds: 0, work: 0, dbl: 0, pay: 0, banked: 0, used: 0, saldo: 0, vac: 0 };
+  const tot = { turnos: 0, noites: 0, fds: 0, work: 0, dbl: 0, pay: 0, banked: 0, used: 0, saldo: 0, vac: 0, sick: 0 };
   ids.forEach(id => {
     const r = rows[id];
     tot.turnos += r.turnos; tot.noites += r.noites; tot.fds += r.fds; tot.work += r.work;
-    tot.dbl += r.dbl; tot.pay += r.pay; tot.banked += r.banked; tot.used += r.used; tot.saldo += r.saldo; tot.vac += r.vac;
+    tot.dbl += r.dbl; tot.pay += r.pay; tot.banked += r.banked; tot.used += r.used; tot.saldo += r.saldo; tot.vac += r.vac; tot.sick += r.sick;
   });
   const maxPay = Math.max(1, ...ids.map(id => rows[id].pay));
   const C = cfg();
@@ -1435,6 +1532,7 @@ function renderHours() {
       <td>${r.noites || '<span class="muted">—</span>'}</td>
       <td>${r.fds || '<span class="muted">—</span>'}</td>
       <td class="vaccol">${r.vac || '<span class="muted">—</span>'}</td>
+      <td class="sickcol">${r.sick || '<span class="muted">—</span>'}</td>
       <td class="big">${fmtH(r.work)}</td>
       <td class="dbl">${r.dbl ? fmtH(r.dbl) : '<span class="muted">—</span>'}</td>
       <td><span class="big">${fmtH(r.pay)}</span><div class="bar" title="${fmtH(r.pay)} h a pagar"><i style="width:${Math.round(r.pay / maxPay * 100)}%"></i></div></td>
@@ -1463,11 +1561,11 @@ function renderHours() {
     <span><b class="${tot.saldo < 0 ? 'neg' : ''}">${fmtBank(tot.saldo)}</b>no banco de horas</span>
   </div>
   <div class="grid-wrap"><table class="hours">
-    <thead><tr><th class="emp">Funcionário</th><th>Turnos</th><th>Noites</th><th>Fins de semana</th><th>Dias de férias</th><th>Horas trabalhadas</th><th>Horas a dobrar</th><th>Horas a pagar</th><th>Para o banco</th><th>Descontadas</th><th>Saldo do banco</th></tr></thead>
+    <thead><tr><th class="emp">Funcionário</th><th>Turnos</th><th>Noites</th><th>Fins de semana</th><th>Dias de férias</th><th>Baixa</th><th>Horas trabalhadas</th><th>Horas a dobrar</th><th>Horas a pagar</th><th>Para o banco</th><th>Descontadas</th><th>Saldo do banco</th></tr></thead>
     <tbody>${body}</tbody>
-    <tfoot><tr><th class="emp">Total da equipa</th><td>${tot.turnos}</td><td>${tot.noites}</td><td>${tot.fds}</td><td class="vaccol">${tot.vac || '—'}</td><td>${fmtH(tot.work)}</td><td class="dbl">${fmtH(tot.dbl)}</td><td>${fmtH(tot.pay)}</td><td class="bankcol">${tot.banked ? '+' + fmtH(tot.banked) : '—'}</td><td class="bankcol">${tot.used ? '−' + fmtH(tot.used) : '—'}</td><td>${fmtBank(tot.saldo)}</td></tr></tfoot>
+    <tfoot><tr><th class="emp">Total da equipa</th><td>${tot.turnos}</td><td>${tot.noites}</td><td>${tot.fds}</td><td class="vaccol">${tot.vac || '—'}</td><td class="sickcol">${tot.sick || '—'}</td><td>${fmtH(tot.work)}</td><td class="dbl">${fmtH(tot.dbl)}</td><td>${fmtH(tot.pay)}</td><td class="bankcol">${tot.banked ? '+' + fmtH(tot.banked) : '—'}</td><td class="bankcol">${tot.used ? '−' + fmtH(tot.used) : '—'}</td><td>${fmtBank(tot.saldo)}</td></tr></tfoot>
   </table></div>
-  <p class="note">O <b>banco de horas</b> junta as horas normais do dia de plantão que escolheste não pagar (as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte e nunca vão para o banco), credita ${fmtH(dayHours())} h por cada noite de serviço feita ao sábado ou domingo (o dia de folga extra) e desconta as horas de folga que a pessoa gastou. O saldo já inclui o valor inicial de cada ficha. As horas trabalhadas são o tempo real de presença, já sem o almoço. Entre <b>${C.doubleFrom}</b> e <b>${C.doubleTo}</b> cada hora conta ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}: a noite de serviço das ${shiftById('N')?.start || '19:00'} às ${shiftById('N')?.end || '07:00'} tem as primeiras horas como normais e o resto a dobrar. A coluna «horas a pagar» já inclui essa majoração. Um turno conta no dia em que começa.</p>`}`;
+  <p class="note">O <b>banco de horas</b> junta as horas normais do dia de plantão que escolheste não pagar (as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte e nunca vão para o banco), credita ${fmtH(dayHours())} h por cada noite de serviço feita ao sábado ou domingo (o dia de folga extra) e desconta as horas de folga que a pessoa gastou. O saldo já inclui o valor inicial de cada ficha. As horas trabalhadas são o tempo real de presença, já sem o almoço e já com as horas a menos de quem chegou tarde ou saiu cedo; as horas dos extras contam pelo que marcaste em cada dia. Entre <b>${C.doubleFrom}</b> e <b>${C.doubleTo}</b> cada hora conta ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}: a noite de serviço das ${shiftById('N')?.start || '19:00'} às ${shiftById('N')?.end || '07:00'} tem as primeiras horas como normais e o resto a dobrar. A coluna «horas a pagar» já inclui essa majoração. Um turno conta no dia em que começa.</p>`}`;
 }
 
 function renderTeam() {
@@ -1481,23 +1579,24 @@ function renderTeam() {
     const off = (e.daysOff || []).slice().sort().map(d => DAYS[d]).join(', ') || 'Nenhum';
     const fixed = Object.entries(e.fixed || {}).filter(([, s]) => s).sort(([a], [b]) => a - b).map(([d, s]) => `${DAYS[d]} ${shiftById(s)?.short || '?'}`).join(' · ') || 'Nenhum';
     let n = 0, h = 0;
-    for (let d = 0; d < 7; d++) { const c = getCell(state.week, id, d); if (c) { n++; if (c.sh) h += hoursOf(c.sh, c.l).work; } }
+    for (let d = 0; d < 7; d++) { const c = getCell(state.week, id, d); if (c) { n++; if (worksOn(c)) h += cellHours(c).work; } }
     return `<article class="card">
       ${personHTML(e)}
       <dl class="facts">
         <dt>Noites</dt><dd class="${e.acceptsNight ? 'yes' : 'no'}">${e.acceptsNight ? 'Aceita' : 'Não aceita'}</dd>
-        <dt>Fins de semana</dt><dd class="${e.acceptsWeekend ? 'yes' : 'no'}">${e.acceptsWeekend ? 'Aceita' : 'Não aceita'}</dd>
+        <dt>Fins de semana</dt><dd class="${e.acceptsWeekend && !e.backoffice ? 'yes' : 'no'}">${e.backoffice ? 'Não (backoffice)' : e.acceptsWeekend ? 'Aceita' : 'Não aceita'}</dd>
+        <dt>Posto</dt><dd>${e.extra ? 'Extra — horas marcadas dia a dia' : e.backoffice ? 'Backoffice por defeito' : 'Balcão'}</dd>
         <dt>Prefere</dt><dd>${esc(pref)}</dd>
         <dt>Indisponível</dt><dd>${esc(off)}</dd>
         <dt>Turnos fixos</dt><dd>${esc(fixed)}</dd>
         <dt>Máximo</dt><dd>${e.maxPerWeek || 5} turnos/semana</dd>
-        <dt>Semana</dt><dd>${fmtH(weeklyTarget(e))} h${e.weeklyHours == null ? ' (valor geral)' : ''}</dd>
+        <dt>Semana</dt><dd>${weeklyTarget(e) ? `${fmtH(weeklyTarget(e))} h${e.weeklyHours == null ? ' (valor geral)' : ''}` : 'Sem mínimo'}</dd>
         <dt>Banco</dt><dd class="${bankBalance(id) < 0 ? 'no' : 'yes'}">${fmtBank(bankBalance(id))}${+e.bankInitial ? ` (inicial ${fmtBank(+e.bankInitial)})` : ''}</dd>
       </dl>
       ${e.notes ? `<p class="notes">${esc(e.notes)}</p>` : ''}
       <div class="card-foot">
         <span class="wk">Sem. ${isoWeek(parseISO(state.week))}: ${n} turnos · ${fmtH(h)} h</span>
-        <span><button class="btn" data-action="vac-range" data-id="${esc(id)}" ${ro}>Férias</button> <button class="btn" data-action="edit" data-id="${esc(id)}" ${ro}>Editar</button> <button class="btn danger" data-action="delete" data-id="${esc(id)}" ${ro}>Apagar</button></span>
+        <span><button class="btn" data-action="vac-range" data-id="${esc(id)}" ${ro}>Férias / baixa</button> <button class="btn" data-action="edit" data-id="${esc(id)}" ${ro}>Editar</button> <button class="btn danger" data-action="delete" data-id="${esc(id)}" ${ro}>Apagar</button></span>
       </div>
     </article>`;
   }).join('');
@@ -1525,6 +1624,10 @@ function cfgWarnings(c) {
     else if (o.open === o.close) w.push(`${DAYS_LONG[d]}: a hora de fecho tem de ser diferente da de abertura.`);
   });
   if ((c.opening || []).length === 7 && c.opening.every(o => o.closed)) w.push('A farmácia tem de estar aberta pelo menos um dia por semana.');
+  (c.presenceBands || []).forEach((b, i) => {
+    if (!validTime(b.from) || !validTime(b.to)) w.push(`Período ${i + 1} do mínimo ao balcão: indica as horas de início e de fim.`);
+    else if (b.from === b.to) w.push(`Período ${i + 1} do mínimo ao balcão: o fim tem de ser diferente do início.`);
+  });
   c.shifts.forEach(s => {
     const nm = s.name || '(sem nome)';
     if (!String(s.name || '').trim()) w.push('Há um turno sem nome.');
@@ -1589,6 +1692,13 @@ function renderSettings() {
       <td><button class="btn danger icon" data-action="cfg-remove" data-i="${i}" aria-label="Remover turno ${esc(s.name)}" ${ro}>✕</button></td>
     </tr>`).join('');
   const thisWeekDuty = dutyDay(state.week);
+  const bands = Array.isArray(c.presenceBands) ? c.presenceBands : [];
+  const bandRows = bands.map((b, i) => `<tr>
+      <td>${timeInput(`cfg-band-${i}-from`, b.from, 'Início do período', `data-cfg="band" data-i="${i}" data-k="from"`, ro)}</td>
+      <td>${timeInput(`cfg-band-${i}-to`, b.to, 'Fim do período', `data-cfg="band" data-i="${i}" data-k="to"`, ro)}</td>
+      <td><input type="number" id="cfg-band-${i}-min" data-cfg="band" data-i="${i}" data-k="min" value="${+b.min || 0}" min="0" max="20" aria-label="Mínimo ao balcão neste período" ${ro}></td>
+      <td><button class="btn danger icon" data-action="band-remove" data-i="${i}" aria-label="Remover período" ${ro}>✕</button></td>
+    </tr>`).join('');
   const opening = [...Array(7)].map((_, d) => c.opening?.[d] || { open: '09:00', close: '20:00', closed: false });
   const openRows = opening.map((o, d) => `<tr class="${o.closed ? 'closed' : ''}">
       <th scope="row">${DAYS_LONG[d]}</th>
@@ -1643,6 +1753,12 @@ function renderSettings() {
       <div class="field-inline"><label for="cfg-doubleTo">Horas a dobrar até às</label>${timeInput('cfg-doubleTo', c.doubleTo, 'Horas a dobrar até às', 'data-cfg="rule" data-k="doubleTo"', ro)}</div>
       <div class="field-inline"><label for="cfg-doubleFactor">Multiplicador</label><input type="number" id="cfg-doubleFactor" data-cfg="rule" data-k="doubleFactor" value="${+c.doubleFactor || 2}" min="1" max="4" step="0.25" ${ro}><small>2 = as horas contam a dobrar</small></div>
       <div class="field-inline"><label for="cfg-minPresent">Mínimo ao balcão</label><input type="number" id="cfg-minPresent" data-cfg="rule" data-k="minPresent" value="${+c.minPresent || 0}" min="0" max="20" ${ro}><small>Pessoas ao balcão em cada meia hora de abertura, sem contar backoffice</small></div>
+      <div class="field-inline" style="grid-column:1/-1">
+        <label>Períodos com outro mínimo ao balcão</label>
+        ${bands.length ? `<div class="cfg-wrap"><table class="cfg bands"><thead><tr><th>Das</th><th>Às</th><th>Mínimo ao balcão</th><th></th></tr></thead><tbody>${bandRows}</tbody></table></div>` : ''}
+        <div><button class="btn" data-action="band-add" ${ro}>Adicionar período</button></div>
+        <small>Ex.: das 12:00 às 16:00 chegam 2 pessoas ao balcão. Fora destes períodos vale o mínimo geral.</small>
+      </div>
       <div class="field-inline"><label for="cfg-backofficePerDay">Backoffice por dia</label><input type="number" id="cfg-backofficePerDay" data-cfg="rule" data-k="backofficePerDay" value="${+c.backofficePerDay || 0}" min="0" max="10" ${ro}><small>Pessoas fora do balcão, que podem reforçar nas horas de ponta</small></div>
       <div class="field-inline"><label for="cfg-weeklyHours">Horas por semana</label><input type="number" id="cfg-weeklyHours" data-cfg="rule" data-k="weeklyHours" value="${+c.weeklyHours || 0}" min="0" max="80" step="0.5" ${ro}><small>Mínimo de cada pessoa, salvo valor próprio na ficha</small></div>
       <div class="field-inline"><label for="cfg-dayHours">Dia completo (h)</label><input type="number" id="cfg-dayHours" data-cfg="rule" data-k="dayHours" value="${+c.dayHours || 8}" min="1" max="24" step="0.5" ${ro}><small>Descontar isto do banco num dia equivale a uma folga</small></div>
@@ -1663,6 +1779,8 @@ function renderSettings() {
 }
 
 /* ---------- Atualização da aplicação ---------- */
+/** Lista de novidades por versão, tal como vem do CHANGELOG.md. */
+const changelogHTML = entries => entries.map(v => `<div class="changelog"><b>${esc(v.version)}</b>${v.date ? ` <span class="muted">· ${esc(v.date)}</span>` : ''}<ul>${v.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>`).join('');
 function renderUpdatePanel() {
   const a = state.app;
   if (!a) { loadApp(); return '<section class="panel"><h3>Versão</h3><p>A ler a versão instalada…</p></section>'; }
@@ -1676,6 +1794,8 @@ function renderUpdatePanel() {
       <dt>Versão da imagem</dt><dd>${esc(a.baseVersion)}</dd>
       ${a.installedAt ? `<dt>Instalada em</dt><dd>${esc(a.installedAt.replace('T', ' às '))}</dd>` : ''}
       ${upd && !upd.error ? `<dt>No repositório</dt><dd>${esc(upd.version)}${upd.upToDate ? ' — já estás na versão mais recente' : ' — <b>há uma versão nova</b>'}</dd>` : ''}
+      ${upd && !upd.error && !upd.upToDate && upd.changes?.length ? `<dt>Novidades</dt><dd>${changelogHTML(upd.changes)}</dd>` : ''}
+      ${(!upd || upd.upToDate) && a.changes?.length ? `<dt>Nesta versão</dt><dd>${changelogHTML(a.changes)}</dd>` : ''}
       ${upd && upd.error ? `<dt>Verificação</dt><dd class="lvl-bad">${esc(upd.error)}</dd>` : ''}
     </dl>
     <div class="actions">
@@ -1711,10 +1831,23 @@ function openMenu(btn) {
   const cur = getCell(wk, id, d);
   const extraOpts = `<button class="opt ${cur?.vac ? 'cur' : ''}" role="menuitem" data-action="vacation" data-on="${cur?.vac ? '' : '1'}">
       <span class="dot tone-vac"></span>
-      <span><b>Férias</b><small>${cur?.vac ? 'clica para retirar' : 'dia de férias'}</small></span></button>`;
-  const opts = [...sortedShifts(), null].map(sh => {
+      <span><b>Férias</b><small>${cur?.vac ? 'clica para retirar' : 'dia de férias'}</small></span></button>
+    <button class="opt ${cur?.sick ? 'cur' : ''}" role="menuitem" data-action="sick" data-on="${cur?.sick ? '' : '1'}">
+      <span class="dot tone-sick"></span>
+      <span><b>Baixa médica</b><small>${cur?.sick ? 'clica para retirar' : 'falta justificada por baixa'}</small></span></button>`;
+  /* Extras: em vez de turnos, indica-se quantas horas fez e, se quiseres, a que horas entrou. */
+  let extraPick = '';
+  if (e.extra) {
+    extraPick = `<div class="lunch-pick"><p>Horas feitas como extra</p><div style="align-items:center">
+      <label style="font-size:12px;color:var(--ink-3)">Horas <input type="number" id="x-hrs" min="0.5" max="16" step="0.5" value="${cur?.hrs || ''}" placeholder="4"></label>
+      <label style="font-size:12px;color:var(--ink-3)">Entrada <input type="text" id="x-from" data-time="1" inputmode="numeric" placeholder="HH:MM" value="${esc(cur?.from || '')}" maxlength="5" style="width:64px"></label>
+      <button class="lchip cur" data-action="extra-hours">Marcar</button>
+      ${cur?.hrs ? '<button class="lchip" data-action="extra-hours" data-clear="1">Retirar</button>' : ''}
+    </div></div>`;
+  }
+  const opts = (e.extra ? [null] : [...sortedShifts(), null]).map(sh => {
     const iss = sh ? cellIssues(e, id, wk, d, { s: sh.id, sh, l: cur?.sh?.id === sh.id ? cur.l : '' }, getCell, true).filter(i => i.msg !== 'Sem hora de almoço marcada') : [];
-    const w = worstOf(iss), isCur = sh ? cur?.sh?.id === sh.id : !cur;
+    const w = worstOf(iss), isCur = sh ? cur?.sh?.id === sh.id : !cur || (!cur.sh && !cur.hrs && !cur.bank && !cur.vac && !cur.sick);
     const h = sh ? hoursOf(sh, '') : null;
     return `<button class="opt ${isCur ? 'cur' : ''}" role="menuitem" data-action="pick" data-code="${sh ? esc(sh.id) : ''}">
       <span class="dot ${sh ? toneOf(sh) : 'tone-off'}"></span>
@@ -1748,15 +1881,26 @@ function openMenu(btn) {
   }
   const st = weekStats(id, wk);
   const head = `<div class="menu-head">${esc(e.name)} · ${DAYS_LONG[d]} ${addDays(parseISO(wk), d).getDate()}`
-    + `<br>Semana: ${fmtH(st.credited)} de ${fmtH(st.target)} h${st.missing ? ` · faltam ${fmtH(st.missing)} h` : ''}</div>`;
-  let postPick = '';
+    + `<br>Semana: ${st.target ? `${fmtH(st.credited)} de ${fmtH(st.target)} h${st.missing ? ` · faltam ${fmtH(st.missing)} h` : ''}` : `${fmtH(st.credited)} h${e.extra ? ' · extra, sem mínimo' : ''}`}</div>`;
+  /* Chegou mais tarde ou saiu mais cedo: horas a menos nesse turno. */
+  let lessPick = '';
   if (cur?.sh) {
+    const full = hoursOf(cur.sh, cur.l).work;
+    lessPick = `<div class="lunch-pick"><p>Horas a menos (chegou tarde / saiu cedo) · turno de ${fmtH(full)} h</p><div style="align-items:center">
+      ${[0.5, 1, 2, 4].map(v => `<button class="lchip ${cur.less === v ? 'cur' : ''}" data-action="less" data-h="${v}">−${fmtH(v)} h</button>`).join('')}
+      <label style="font-size:12px;color:var(--ink-3)">Outro <input type="number" id="x-less" min="0" max="${full}" step="0.5" value="${cur.less && ![0.5, 1, 2, 4].includes(cur.less) ? cur.less : ''}"></label>
+      <button class="lchip" data-action="less" data-h="input">Aplicar</button>
+      ${cur.less ? '<button class="lchip" data-action="less" data-h="0">Repor horas</button>' : ''}
+    </div></div>`;
+  }
+  let postPick = '';
+  if (worksOn(cur)) {
     postPick = `<div class="lunch-pick"><p>Posto</p><div>
       <button class="lchip ${cur.post === 'back' ? '' : 'cur'}" data-action="post" data-post="">Balcão</button>
       <button class="lchip ${cur.post === 'back' ? 'cur' : ''}" data-action="post" data-post="back">Backoffice</button>
     </div></div>`;
   }
-  menu.innerHTML = `${head}${opts}${extraOpts}${postPick}${dutyPick}${lunch}${bankPick}`;
+  menu.innerHTML = `${head}${extraPick}${opts}${extraOpts}${postPick}${lessPick}${dutyPick}${lunch}${e.extra ? '' : bankPick}`;
   menu.hidden = false;
   const r = btn.getBoundingClientRect();
   const mw = menu.offsetWidth, mh = menu.offsetHeight;
@@ -1792,15 +1936,47 @@ function setShift(id, d, sid) {
   const v = { s: sid };
   if (sh?.lunch) v.l = cur?.sh?.id === sid && cur.l ? cur.l : pickLunch(sh, lunchesOn(state.week, d, id));
   if (cur?.pay === 'bank' && d === dutyDay(state.week)) v.pay = 'bank';
+  /* Quem é de backoffice por defeito entra logo em backoffice (menos na noite de serviço). */
+  if (cur?.sh ? cur.post === 'back' : state.employees[id]?.backoffice && !sh?.night) v.post = 'back';
   writeCell(id, d, v);
 }
 function setLunch(id, d, l) {
   const cur = getCell(state.week, id, d);
-  if (cur?.sh) writeCell(id, d, { s: cur.sh.id, l, ...(cur.pay ? { pay: cur.pay } : {}) });
+  if (cur?.sh) writeCell(id, d, { ...cellBase(cur), l });
 }
-const cellBase = cur => cur?.sh
-  ? { s: cur.sh.id, ...(cur.l ? { l: cur.l } : {}), ...(cur.pay ? { pay: cur.pay } : {}), ...(cur.post ? { post: cur.post } : {}) }
-  : null;
+/** Reduz uma célula lida ao que vai para a base de dados. */
+function cellRaw(c) {
+  if (!c) return null;
+  if (c.vac) return { vac: true };
+  if (c.sick) return { sick: true };
+  const v = {};
+  if (c.sh) { v.s = c.sh.id; if (c.l) v.l = c.l; if (c.pay) v.pay = c.pay; if (c.less) v.less = c.less; }
+  else if (c.hrs) { v.hrs = c.hrs; if (c.from) v.from = c.from; }
+  else if (c.bank) { v.bank = c.bank; return v; }
+  else return null;
+  if (c.post) v.post = c.post;
+  return v;
+}
+const cellBase = cur => worksOn(cur) ? cellRaw(cur) : null;
+/** Horas avulsas de um extra nesse dia (0 retira). */
+function setExtraHours(id, d, hrs, from) {
+  const cur = getCell(state.week, id, d);
+  if (!hrs) return writeCell(id, d, null);
+  const v = { hrs: Math.min(16, Math.max(0.5, Math.round(hrs * 2) / 2)) };
+  if (from) v.from = from;
+  if (cur?.post) v.post = cur.post;
+  writeCell(id, d, v);
+}
+/** Horas a menos num turno (chegou tarde ou saiu cedo); 0 repõe. */
+function setLess(id, d, hours) {
+  const cur = getCell(state.week, id, d);
+  if (!cur?.sh) return;
+  const v = cellBase(cur);
+  const max = hoursOf(cur.sh, cur.l).work;
+  const h = Math.min(max, Math.max(0, Math.round(hours * 2) / 2));
+  if (h) v.less = h; else delete v.less;
+  writeCell(id, d, v);
+}
 function setDutyPay(id, d, pay) {
   const cur = getCell(state.week, id, d);
   if (!cur?.sh) return;
@@ -1810,7 +1986,7 @@ function setDutyPay(id, d, pay) {
 }
 function setPost(id, d, post) {
   const cur = getCell(state.week, id, d);
-  if (!cur?.sh) return;
+  if (!worksOn(cur)) return;
   const v = cellBase(cur);
   if (post) v.post = post; else delete v.post;
   writeCell(id, d, v);
@@ -1820,6 +1996,7 @@ function setVacation(id, d, on) {
 }
 /** Marca ou retira férias entre duas datas, semana a semana. */
 function setVacationRange(id, fromISO, toISO, on) {
+  /* on: true = férias, 'sick' = baixa médica, false = retirar */
   let cursor = parseISO(fromISO);
   const end = parseISO(toISO);
   let dias = 0;
@@ -1834,8 +2011,9 @@ function setVacationRange(id, fromISO, toISO, on) {
     sched.cells = sched.cells || {};
     sched.cells[id] = sched.cells[id] || {};
     for (const d of dias_) {
-      if (on) sched.cells[id][d] = { vac: true };
-      else if (sched.cells[id][d]?.vac) delete sched.cells[id][d];
+      if (on === 'sick') sched.cells[id][d] = { sick: true };
+      else if (on) sched.cells[id][d] = { vac: true };
+      else if (sched.cells[id][d]?.vac || sched.cells[id][d]?.sick) delete sched.cells[id][d];
       dias++;
     }
     sched.updatedAt = new Date().toISOString();
@@ -1848,7 +2026,7 @@ function setVacationRange(id, fromISO, toISO, on) {
 function setBankOff(id, d, hours) {
   if (!hours) {
     const cur = getCell(state.week, id, d);
-    return writeCell(id, d, cur?.sh ? { s: cur.sh.id, ...(cur.l ? { l: cur.l } : {}), ...(cur.pay ? { pay: cur.pay } : {}) } : null);
+    return writeCell(id, d, cellBase(cur));
   }
   writeCell(id, d, { bank: hours });
 }
@@ -1875,12 +2053,12 @@ function redistributeLunches() {
 function downloadCSV() {
   const [y, m] = state.month.split('-').map(Number);
   const rows = monthStats(state.month), C = cfg();
-  const head = ['Funcionário', 'Função', 'Turnos', 'Noites', 'Fins de semana', 'Dias de férias', 'Horas trabalhadas',
+  const head = ['Funcionário', 'Função', 'Turnos', 'Noites', 'Fins de semana', 'Dias de férias', 'Dias de baixa', 'Horas trabalhadas', 'Horas a menos',
     `Horas a dobrar (${C.doubleFrom}-${C.doubleTo})`, 'Horas a pagar', 'Para o banco', 'Descontadas do banco', 'Saldo do banco'];
   const lines = [head.join(';')];
   for (const id of sortedIds()) {
     const e = state.employees[id], r = rows[id];
-    lines.push([e.name, e.role || '', r.turnos, r.noites, r.fds, r.vac, fmtH(r.work), fmtH(r.dbl), fmtH(r.pay),
+    lines.push([e.name, e.role || '', r.turnos, r.noites, r.fds, r.vac, r.sick, fmtH(r.work), fmtH(r.less), fmtH(r.dbl), fmtH(r.pay),
       fmtH(r.banked), fmtH(r.used), fmtH(r.saldo)]
       .map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'));
   }
@@ -1927,6 +2105,8 @@ function openEditor(id) {
   document.querySelectorAll('input[name="emp-color"]').forEach((r, i) => { r.checked = i === ci; });
   $('#emp-night').checked = !!e.acceptsNight;
   $('#emp-weekend').checked = !!e.acceptsWeekend;
+  $('#emp-backoffice').checked = !!e.backoffice;
+  $('#emp-extra').checked = !!e.extra;
   buildShiftFields(e);
   DAYS.forEach((_, i) => { $('#emp-off-' + i).checked = (e.daysOff || []).includes(i); });
   $('#emp-max').value = e.maxPerWeek || 5;
@@ -1948,6 +2128,8 @@ function readEditor() {
     color: (document.querySelector('input[name="emp-color"]:checked') || {}).value || COLORS[0],
     acceptsNight: $('#emp-night').checked,
     acceptsWeekend: $('#emp-weekend').checked,
+    backoffice: $('#emp-backoffice').checked,
+    extra: $('#emp-extra').checked,
     preferred: [...document.querySelectorAll('#emp-pref input:checked')].map(i => i.value),
     daysOff: DAYS.map((_, i) => i).filter(i => $('#emp-off-' + i).checked),
     maxPerWeek: Math.min(7, Math.max(1, parseInt($('#emp-max').value, 10) || 5)),
@@ -1971,6 +2153,10 @@ function updateEditorWarn() {
   }
   if (Object.keys(e.fixed).length > e.maxPerWeek) w.push(`Tem ${Object.keys(e.fixed).length} turnos fixos mas o máximo é ${e.maxPerWeek}`);
   if (e.preferred.some(p => shiftById(p)?.night) && !e.acceptsNight) w.push('Prefere a noite, mas o turno noturno está desligado');
+  if (e.backoffice && e.acceptsWeekend) w.push('Backoffice por defeito: não vai ser escalada ao sábado nem ao domingo, mesmo aceitando fins de semana');
+  if (e.backoffice && Object.keys(e.fixed).some(d => +d >= 5)) w.push('Turno fixo ao fim de semana numa pessoa de backoffice');
+  if (e.extra && Object.keys(e.fixed).length) w.push('Pessoa extra com turnos fixos: os turnos fixos não são atribuídos a extras');
+  $('#emp-weekend').closest('.toggle')?.classList.toggle('muted', e.backoffice);
   $('#editor-warn').innerHTML = w.length ? `<div class="form-warn">Atenção a estas regras — os turnos fixos afetados podem não ser atribuídos:<ul>${w.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
 }
 $('#editor-form').addEventListener('input', updateEditorWarn);
@@ -2008,7 +2194,7 @@ document.addEventListener('click', async ev => {
   const el = ev.target.closest('[data-action]');
   if (!el) { if (!ev.target.closest('#menu')) closeMenu(); return; }
   const a = el.dataset.action;
-  if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation'].includes(a)) closeMenu();
+  if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation', 'sick', 'less', 'extra-hours'].includes(a)) closeMenu();
   switch (a) {
     case 'tab': state.tab = el.dataset.tab; ls.set('escala.tab', state.tab); render(); window.scrollTo(0, 0); break;
     case 'logout':
@@ -2048,9 +2234,32 @@ document.addEventListener('click', async ev => {
       setPost(ctx.id, ctx.d, el.dataset.post);
       break;
     }
+    case 'less': {
+      const ctx = menuCtx; if (!ctx) break;
+      const h = el.dataset.h === 'input' ? +($('#x-less')?.value || 0) : +el.dataset.h;
+      closeMenu();
+      setLess(ctx.id, ctx.d, h);
+      toast(h ? `Menos ${fmtH(h)} h neste turno.` : 'Horas do turno repostas.');
+      break;
+    }
+    case 'extra-hours': {
+      const ctx = menuCtx; if (!ctx) break;
+      const hrs = el.dataset.clear ? 0 : +($('#x-hrs')?.value || 0);
+      const fromRaw = ($('#x-from')?.value || '').trim(), from = fromRaw ? normalizeTime(fromRaw) : '';
+      if (!el.dataset.clear && !hrs) { toast('Indica quantas horas fez.'); $('#x-hrs')?.focus(); break; }
+      if (fromRaw && !from) { toast('Escreve a hora de entrada no formato 24 horas.'); $('#x-from')?.focus(); break; }
+      closeMenu();
+      setExtraHours(ctx.id, ctx.d, hrs, from);
+      break;
+    }
     case 'vacation': {
       const ctx = menuCtx; if (!ctx) break; closeMenu();
       setVacation(ctx.id, ctx.d, !!el.dataset.on);
+      break;
+    }
+    case 'sick': {
+      const ctx = menuCtx; if (!ctx) break; closeMenu();
+      writeCell(ctx.id, ctx.d, el.dataset.on ? { sick: true } : null);
       break;
     }
     case 'vac-range': openVacation(el.dataset.id); break;
@@ -2093,6 +2302,16 @@ document.addEventListener('click', async ev => {
       const f = document.getElementById(`cfg-${c.shifts.length - 1}-name`); if (f) { f.focus(); f.select(); }
       break;
     }
+    case 'band-add': {
+      const c = draft();
+      (c.presenceBands = Array.isArray(c.presenceBands) ? c.presenceBands : []).push({ from: '12:00', to: '16:00', min: Math.max(0, (+c.minPresent || 1) - 1) });
+      state.cfgDirty = true; render();
+      const f = document.getElementById(`cfg-band-${c.presenceBands.length - 1}-from`); if (f) f.focus();
+      break;
+    }
+    case 'band-remove': {
+      const c = draft(); c.presenceBands.splice(+el.dataset.i, 1); state.cfgDirty = true; render(); break;
+    }
     case 'cfg-remove': {
       const c = draft(), i = +el.dataset.i, s = c.shifts[i];
       if (shiftInUse(s.id) && !await confirmBox('Remover turno', `O turno "${s.name}" está a ser usado em escalas ou turnos fixos. Esses dias vão aparecer como "turno removido" até escolheres outro.`, 'Remover', true)) break;
@@ -2115,6 +2334,8 @@ document.addEventListener('click', async ev => {
       c.dutyStep = Number.isFinite(+c.dutyStep) ? +c.dutyStep : 1;
       c.dutyAnchorWeek = iso(mondayOf(parseISO(/^\d{4}-\d{2}-\d{2}$/.test(c.dutyAnchorWeek) ? c.dutyAnchorWeek : DEFAULT_CONFIG.dutyAnchorWeek)));
       ['lunchFrom', 'lunchTo', 'doubleFrom', 'doubleTo'].forEach(k => { c[k] = normalizeTime(c[k]) || cfg()[k]; });
+      c.presenceBands = (Array.isArray(c.presenceBands) ? c.presenceBands : [])
+        .map(b => ({ from: normalizeTime(b.from) || '', to: normalizeTime(b.to) || '', min: Math.max(0, Math.min(20, +b.min || 0)) }));
       c.opening = [...Array(7)].map((_, d) => {
         const o = (Array.isArray(c.opening) ? c.opening : [])[d] || {};
         return { open: normalizeTime(o.open) || '09:00', close: normalizeTime(o.close) || '20:00', closed: !!o.closed };
@@ -2236,7 +2457,7 @@ document.addEventListener('submit', async ev => {
     }
   } else if (form.id === 'vac-form') {
     ev.preventDefault();
-    const from = $('#vac-from').value, to = $('#vac-to').value, on = $('#vac-mode').value === 'on';
+    const mode = $('#vac-mode').value, from = $('#vac-from').value, to = $('#vac-to').value, on = mode === 'sick' ? 'sick' : mode === 'on';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) {
       $('#vac-warn').innerHTML = '<div class="form-warn">Indica um período válido: a data final não pode ser anterior à inicial.</div>';
       return;
@@ -2247,7 +2468,7 @@ document.addEventListener('submit', async ev => {
     }
     const dias = setVacationRange(vacId, from, to, on);
     $('#vacdlg').close();
-    toast(`${on ? 'Marcados' : 'Retirados'} ${dias} ${dias === 1 ? 'dia' : 'dias'} de férias de ${state.employees[vacId].name}.`);
+    toast(`${on ? 'Marcados' : 'Retirados'} ${dias} ${dias === 1 ? 'dia' : 'dias'} de ${on === 'sick' ? 'baixa' : on ? 'férias' : 'férias/baixa'} de ${state.employees[vacId].name}.`);
   } else if (form.id === 'pw-form') {
     ev.preventDefault();
     const nova = $('#pw-new').value;
@@ -2291,7 +2512,7 @@ let vacId = null;
 function openVacation(id) {
   vacId = id;
   const e = state.employees[id];
-  $('#vac-title').textContent = `Férias de ${e.name}`;
+  $('#vac-title').textContent = `Férias e baixas de ${e.name}`;
   $('#vac-from').value = state.week;
   $('#vac-to').value = iso(addDays(parseISO(state.week), 6));
   $('#vac-mode').value = 'on';
@@ -2319,6 +2540,7 @@ function applyCfgInput(t) {
   const c = draft(), k = t.dataset.k;
   const val = t.type === 'checkbox' ? t.checked : t.type === 'number' ? (t.value === '' ? '' : +t.value) : t.value;
   if (t.dataset.cfg === 'shift') c.shifts[+t.dataset.i][k] = val;
+  else if (t.dataset.cfg === 'band') { (c.presenceBands = c.presenceBands || [])[+t.dataset.i][k] = val; }
   else if (t.dataset.cfg === 'open') {
     if (!Array.isArray(c.opening) || c.opening.length !== 7) c.opening = clone(DEFAULT_CONFIG.opening);
     c.opening[+t.dataset.i][k] = t.dataset.invert ? !val : val;

@@ -75,8 +75,10 @@ Variáveis: `ESCALA_UPDATE_REPO` (por omissão `Xeon3D/escala-farmacia`),
 `ESCALA_UPDATES=0` para desligar a funcionalidade.
 
 Para lançar uma versão nova: sobe `APP_VERSION` no `server.py` **e** o ficheiro
-`VERSION` (têm de ser iguais), faz commit e push. Quem tiver a aplicação instalada
-passa a ver a atualização disponível.
+`VERSION` (têm de ser iguais), acrescenta uma entrada `## <versão> — <data>` com a
+lista de novidades no topo do `CHANGELOG.md`, faz commit e push. Quem tiver a aplicação
+instalada passa a ver a atualização disponível, com as novidades das versões que lhe
+faltam.
 
 ## Docker
 
@@ -178,7 +180,23 @@ exportação e importação em JSON.
 - **Balcão e backoffice**: cada turno atribuído pode estar ao *balcão* ou em
   *backoffice*. O gráfico de presença e o mínimo ao balcão só contam quem está ao
   balcão; quem está em backoffice aparece numa linha própria e serve de reforço nas
-  horas de ponta. Por omissão são 3 ao balcão e 1 em backoffice por dia.
+  horas de ponta. Por omissão são 3 ao balcão e 1 em backoffice por dia. O backoffice
+  não trabalha ao sábado nem ao domingo.
+- **Backoffice por defeito**: na ficha, marca quem trabalha sempre em backoffice. Os
+  turnos dessa pessoa entram logo nesse posto e ela não é escalada ao fim de semana.
+- **Extras**: na ficha, marca quem é *extra*. Não tem turnos nem mínimo semanal e a
+  geração automática não a escala; em cada dia indicas no menu da célula quantas horas
+  fez e, se quiseres, a que horas entrou (para contar no gráfico do balcão). As horas
+  contam nos totais da semana e do mês.
+- **Horas a menos**: se alguém chegou mais tarde ou saiu mais cedo, no menu da célula
+  tiras −0,5, −1, −2, −4 h ou outro valor ao turno. As horas saem primeiro das normais
+  e só depois das que contam a dobrar.
+- **Baixa médica**: marca-se dia a dia no menu da célula ou por período no botão
+  *Férias / baixa* da ficha. Tal como as férias, não recebe turnos e desconta um dia ao
+  mínimo da semana; aparece em coluna própria no separador *Horas*.
+- **Períodos com outro mínimo ao balcão**: em *Turnos → Almoço, balcão…* podes definir
+  faixas horárias em que o mínimo é diferente (ex.: das 12:00 às 16:00 chegam 2
+  pessoas). Fora dessas faixas vale o mínimo geral.
 
 ## Horário da farmácia
 

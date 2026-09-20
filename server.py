@@ -26,7 +26,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-APP_VERSION = "1.6.0"
+APP_VERSION = "1.6.1"
 
 ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT / "public"
@@ -67,6 +67,8 @@ DEFAULT_SETTINGS = {
     "dutyStep": 1,
     # Horário de abertura, de segunda (índice 0) a domingo; "closed" marca o encerramento semanal.
     "opening": [{"open": "09:00", "close": "20:00", "closed": False} for _ in range(7)],
+    # Períodos com outro mínimo ao balcão: [{"from": "12:00", "to": "16:00", "min": 2}]
+    "presenceBands": [],
 }
 
 # Equipa de exemplo, criada só quando a base de dados está vazia, para a aplicação
@@ -95,7 +97,9 @@ CREATE TABLE IF NOT EXISTS employees (
   fixed         TEXT NOT NULL DEFAULT '{}',
   notes         TEXT NOT NULL DEFAULT '',
   weekly_hours  REAL,
-  bank_initial  REAL NOT NULL DEFAULT 0
+  bank_initial  REAL NOT NULL DEFAULT 0,
+  backoffice    INTEGER NOT NULL DEFAULT 0,
+  extra         INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS shifts (
   id        TEXT PRIMARY KEY,
@@ -120,6 +124,9 @@ CREATE TABLE IF NOT EXISTS assignments (
   bank_hours REAL NOT NULL DEFAULT 0,
   post     TEXT NOT NULL DEFAULT '',
   kind     TEXT NOT NULL DEFAULT '',
+  hrs      REAL NOT NULL DEFAULT 0,
+  start    TEXT NOT NULL DEFAULT '',
+  less     REAL NOT NULL DEFAULT 0,
   PRIMARY KEY (week, day, emp_id),
   FOREIGN KEY (emp_id) REFERENCES employees(id) ON DELETE CASCADE
 );
@@ -167,9 +174,12 @@ def connect(path: Path) -> sqlite3.Connection:
 def migrate() -> None:
     """Acrescenta colunas novas a bases de dados criadas por versões anteriores."""
     additions = {
-        "employees": {"weekly_hours": "REAL", "bank_initial": "REAL NOT NULL DEFAULT 0"},
+        "employees": {"weekly_hours": "REAL", "bank_initial": "REAL NOT NULL DEFAULT 0",
+                      "backoffice": "INTEGER NOT NULL DEFAULT 0", "extra": "INTEGER NOT NULL DEFAULT 0"},
         "assignments": {"pay": "TEXT NOT NULL DEFAULT ''", "bank_hours": "REAL NOT NULL DEFAULT 0",
-                        "post": "TEXT NOT NULL DEFAULT ''", "kind": "TEXT NOT NULL DEFAULT ''"},
+                        "post": "TEXT NOT NULL DEFAULT ''", "kind": "TEXT NOT NULL DEFAULT ''",
+                        "hrs": "REAL NOT NULL DEFAULT 0", "start": "TEXT NOT NULL DEFAULT ''",
+                        "less": "REAL NOT NULL DEFAULT 0"},
     }
     with lock:
         for table, columns in additions.items():
@@ -253,13 +263,53 @@ def fetch(url: str, timeout: int = 30) -> bytes:
     return data
 
 
+def version_key(v: str) -> tuple:
+    """Ordena versões como 1.6.1 > 1.6.0 > 1.5.10."""
+    return tuple(int(p) if p.isdigit() else -1 for p in re.split(r"[.\-]", v or ""))
+
+
+def parse_changelog(text: str) -> list[dict]:
+    """Lê o CHANGELOG.md: cabeçalhos '## 1.6.1 — 2026-09-20' seguidos de linhas '- item'."""
+    out: list[dict] = []
+    for line in text.splitlines():
+        m = re.match(r"^##\s+v?([0-9][0-9A-Za-z.\-_]*)\s*(?:[—–-]\s*(.+))?$", line.strip())
+        if m:
+            out.append({"version": m.group(1), "date": (m.group(2) or "").strip()[:40], "items": []})
+        elif out and re.match(r"^\s*[-*]\s+", line):
+            item = re.sub(r"^\s*[-*]\s+", "", line).strip()
+            if item:
+                out[-1]["items"].append(item[:400])
+        if len(out) > 50:
+            break
+    return [e for e in out if e["items"]]
+
+
+def changes_since(entries: list[dict], current: str, until: str | None = None) -> list[dict]:
+    """Entradas mais recentes do que a versão atual (e até à versão indicada)."""
+    cur = version_key(current)
+    top = version_key(until) if until else None
+    return [e for e in entries if version_key(e["version"]) > cur and (top is None or version_key(e["version"]) <= top)]
+
+
+def local_changelog() -> list[dict]:
+    try:
+        return parse_changelog((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"))
+    except OSError:
+        return []
+
+
 def latest_version() -> dict:
-    """Versão publicada no repositório, lida do ficheiro VERSION."""
+    """Versão publicada no repositório, lida do ficheiro VERSION, e as novidades do CHANGELOG.md."""
     base = f"https://raw.githubusercontent.com/{UPDATE_REPO}/{UPDATE_REF}"
     version = fetch(f"{base}/VERSION", timeout=15).decode("utf-8", "replace").strip()[:32]
     if not re.fullmatch(r"[0-9A-Za-z.\-_]{1,32}", version or ""):
         raise ValueError("o repositório não devolveu uma versão válida")
-    return {"version": version, "repo": UPDATE_REPO, "ref": UPDATE_REF}
+    changes: list[dict] = []
+    try:
+        changes = changes_since(parse_changelog(fetch(f"{base}/CHANGELOG.md", timeout=15).decode("utf-8", "replace")), APP_VERSION, version)
+    except Exception:  # noqa: BLE001 - sem changelog não há drama
+        pass
+    return {"version": version, "repo": UPDATE_REPO, "ref": UPDATE_REF, "changes": changes}
 
 
 def install_update(ref: str | None = None) -> dict:
@@ -284,7 +334,7 @@ def install_update(ref: str | None = None) -> dict:
                 continue
             rel = "/".join(parts)
             # Só o servidor e a interface: nada de workflows, Dockerfile ou testes.
-            if not (rel == "server.py" or rel == "VERSION" or rel.startswith("public/")):
+            if not (rel in ("server.py", "VERSION", "CHANGELOG.md") or rel.startswith("public/")):
                 continue
             if m.size > 5 * 1024 * 1024:
                 continue
@@ -545,6 +595,7 @@ def read_state() -> dict:
                 "preferred": json.loads(r["preferred"]), "daysOff": json.loads(r["days_off"]),
                 "maxPerWeek": r["max_per_week"], "fixed": json.loads(r["fixed"]), "notes": r["notes"],
                 "weeklyHours": r["weekly_hours"], "bankInitial": r["bank_initial"] or 0,
+                "backoffice": bool(r["backoffice"]), "extra": bool(r["extra"]),
             }
             for r in conn.execute("SELECT * FROM employees")
         }
@@ -564,6 +615,14 @@ def read_state() -> dict:
                 cell["post"] = r["post"]
             if r["kind"] == "vac":
                 cell["vac"] = True
+            elif r["kind"] == "sick":
+                cell["sick"] = True
+            if r["hrs"]:
+                cell["hrs"] = r["hrs"]
+            if r["start"]:
+                cell["from"] = r["start"]
+            if r["less"]:
+                cell["less"] = r["less"]
             if cell:
                 week["cells"].setdefault(r["emp_id"], {})[str(r["day"])] = cell
     config = dict(settings)
@@ -576,13 +635,13 @@ def read_state() -> dict:
 def save_employee(eid: str, e: dict) -> None:
     with lock:
         conn.execute(
-            "INSERT INTO employees (id,name,role,color,accepts_night,accepts_weekend,preferred,days_off,max_per_week,fixed,notes,weekly_hours,bank_initial)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+            "INSERT INTO employees (id,name,role,color,accepts_night,accepts_weekend,preferred,days_off,max_per_week,fixed,notes,weekly_hours,bank_initial,backoffice,extra)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
             " ON CONFLICT(id) DO UPDATE SET name=excluded.name, role=excluded.role, color=excluded.color,"
             " accepts_night=excluded.accepts_night, accepts_weekend=excluded.accepts_weekend,"
             " preferred=excluded.preferred, days_off=excluded.days_off, max_per_week=excluded.max_per_week,"
             " fixed=excluded.fixed, notes=excluded.notes, weekly_hours=excluded.weekly_hours,"
-            " bank_initial=excluded.bank_initial",
+            " bank_initial=excluded.bank_initial, backoffice=excluded.backoffice, extra=excluded.extra",
             (
                 eid, str(e.get("name", ""))[:80], str(e.get("role", ""))[:80], str(e.get("color", "#0A7A5A"))[:20],
                 int(bool(e.get("acceptsNight"))), int(bool(e.get("acceptsWeekend"))),
@@ -591,6 +650,7 @@ def save_employee(eid: str, e: dict) -> None:
                 str(e.get("notes", ""))[:500],
                 None if e.get("weeklyHours") in (None, "") else max(0.0, min(80.0, float(e["weeklyHours"]))),
                 max(-2000.0, min(2000.0, float(e.get("bankInitial") or 0))),
+                int(bool(e.get("backoffice"))), int(bool(e.get("extra"))),
             ),
         )
         conn.commit()
@@ -615,6 +675,7 @@ def save_week(week: str, cells: dict) -> None:
                 continue
             if not 0 <= d <= 6 or not cell:
                 continue
+            hrs, start, less = 0.0, "", 0.0
             if isinstance(cell, str):
                 sid, lunch, pay, bank, post, kind = cell, "", "", 0.0, "", ""
             else:
@@ -622,19 +683,26 @@ def save_week(week: str, cells: dict) -> None:
                 lunch = str(cell.get("l") or "")[:5]
                 pay = "bank" if cell.get("pay") == "bank" else ""
                 post = "back" if cell.get("post") == "back" else ""
-                kind = "vac" if cell.get("vac") else ""
+                kind = "vac" if cell.get("vac") else "sick" if cell.get("sick") else ""
                 try:
                     bank = max(0.0, min(24.0, float(cell.get("bank") or 0)))
                 except (TypeError, ValueError):
                     bank = 0.0
-            if not sid and not bank and not kind:
+                # Extras: horas avulsas e hora de entrada. Turnos: horas a menos.
+                try:
+                    hrs = 0.0 if sid else max(0.0, min(24.0, float(cell.get("hrs") or 0)))
+                    less = max(0.0, min(24.0, float(cell.get("less") or 0))) if sid else 0.0
+                except (TypeError, ValueError):
+                    hrs, less = 0.0, 0.0
+                start = str(cell.get("from") or "")[:5] if hrs else ""
+            if not sid and not bank and not kind and not hrs:
                 continue
-            rows.append((week, d, str(emp_id), sid, lunch, pay, bank, post, kind))
+            rows.append((week, d, str(emp_id), sid, lunch, pay, bank, post, kind, hrs, start, less))
     with lock:
         conn.execute("DELETE FROM assignments WHERE week=?", (week,))
         conn.executemany(
-            "INSERT OR REPLACE INTO assignments (week,day,emp_id,shift_id,lunch,pay,bank_hours,post,kind)"
-            " VALUES (?,?,?,?,?,?,?,?,?)", rows
+            "INSERT OR REPLACE INTO assignments (week,day,emp_id,shift_id,lunch,pay,bank_hours,post,kind,hrs,start,less)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows
         )
         conn.commit()
 
@@ -795,6 +863,7 @@ class Handler(BaseHTTPRequestHandler):
                 "canRollback": bool(p.get("previous")) or bool(p.get("dir")),
                 "updatesEnabled": UPDATES_ENABLED,
                 "repo": UPDATE_REPO, "ref": UPDATE_REF,
+                "changes": [e for e in local_changelog() if e["version"] == APP_VERSION],
             })
         if path == "/api/app/check":
             if not self.require(admin=True):
@@ -806,7 +875,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:  # noqa: BLE001 - rede, DNS, GitHub em baixo
                 return self.send_json({"error": "check_failed", "message": str(e)}, 502)
             info["current"] = APP_VERSION
-            info["upToDate"] = info["version"] == APP_VERSION
+            info["upToDate"] = version_key(info["version"]) <= version_key(APP_VERSION)
             return self.send_json(info)
         if path == "/api/me":
             user = self.current_user()

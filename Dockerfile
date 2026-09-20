@@ -7,6 +7,7 @@ LABEL org.opencontainers.image.title="Escala da Farmácia" \
 WORKDIR /app
 COPY server.py ./
 COPY public/ ./public/
+COPY CHANGELOG.md ./
 
 # A base de dados vive num volume, fora da imagem.
 ENV ESCALA_DB=/data/escala.db \
