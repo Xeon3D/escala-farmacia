@@ -4,6 +4,10 @@ Cada versão tem um cabeçalho `## versão — data` e uma lista de pontos. A ap
 aos administradores as entradas mais recentes do que a versão instalada quando procura
 atualizações.
 
+## 1.6.3 — 2026-09-20
+- Corrige a atualização dentro do contentor: a partir da segunda atualização o reinício ficava na versão da imagem.
+- Definições: escolher a imagem do logótipo voltou a funcionar.
+
 ## 1.6.2 — 2026-09-20
 - Horas extra: o que passar do mínimo da semana entra no banco de horas e acumula nas semanas seguintes.
 - Folga extra do plantão marcada como célula própria, sempre depois da noite de fim de semana; aviso enquanto não estiver marcada.
