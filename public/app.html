@@ -1279,6 +1279,8 @@ function lunchesOn(wk, d, exceptId) {
 
 /* ---------- Presença ao balcão ---------- */
 /** Mínimo de pessoas ao balcão a uma dada hora (em minutos), tendo em conta os períodos com outro mínimo. */
+/** Ao sábado o mínimo ao balcão é o número de pessoas previstas para o sábado; nos outros dias, o geral e as faixas. */
+const minFor = (d, t) => (((d % 7) + 7) % 7 === 5 ? saturdayPeople() : minAt(t));
 function minAt(t) {
   const C = cfg(), tt = ((t % 1440) + 1440) % 1440;
   for (const b of (Array.isArray(C.presenceBands) ? C.presenceBands : [])) {
@@ -1305,7 +1307,7 @@ function presence(wk, d, ids) {
   const slots = [];
   for (let t = from; t < to; t += 30) {
     const aqui = presentes(t);
-    slots.push({ t, n: aqui.filter(r => !r.back).length, back: aqui.filter(r => r.back).length, min: minAt(t) });
+    slots.push({ t, n: aqui.filter(r => !r.back).length, back: aqui.filter(r => r.back).length, min: minFor(d, t) });
   }
   return { from, to, slots };
 }
@@ -1449,7 +1451,7 @@ function generate(wk) {
       for (let t = oa; t < ob; t += 30) {
         let n = 0;
         for (const id of [...workers, ...others]) { if (isBack(id)) continue; const sh = shiftOn(shiftById(cells[id][d].s), d); const [a, b] = span(sh); if (a <= t && t < b) n++; }
-        out.push({ n, min: minAt(t) });
+        out.push({ n, min: minFor(d, t) });
       }
       return out;
     };
@@ -1888,7 +1890,7 @@ function renderCounter() {
       if (!open[d] || t + 60 <= open[d][0] || t >= open[d][1]) { tds += '<td class="shut">—</td>'; continue; }
       const ps = people(d, t);
       const atCounter = ps.filter(p => !p.back && !p.lunchAll).length;
-      const min = Math.min(minAt(t), minAt(t + 30));
+      const min = Math.min(minFor(d, t), minFor(d, t + 30));
       const chips = ps.sort((a, b) => (a.back - b.back) || a.e.name.localeCompare(b.e.name, 'pt')).map(p =>
         `<span class="${p.back ? 'back' : ''} ${p.lunchAll ? 'lunch' : ''}" title="${esc(p.e.name)}${p.back ? ' · backoffice' : ''}${p.l !== null ? ` · almoço ${fmtMin(p.l)}–${fmtMin(p.l + lm)}` : ''}"><i style="background:${esc(p.e.color || COLORS[0])}"></i>${esc(p.e.name.split(' ')[0])}${p.lunchPart ? ' <small>🍴</small>' : ''}${p.back ? ' <small>back</small>' : ''}</span>`).join('');
       const low = atCounter < min;
@@ -2206,7 +2208,7 @@ function renderSettings() {
         <div><button class="btn" data-action="band-add" ${ro}>Adicionar período</button></div>
         <small>Ex.: das 12:00 às 16:00 chegam 2 pessoas ao balcão. Fora destes períodos vale o mínimo geral.</small>
       </div>
-      <div class="field-inline"><label for="cfg-saturdayPeople">Pessoas ao sábado</label><input type="number" id="cfg-saturdayPeople" data-cfg="rule" data-k="saturdayPeople" value="${+c.saturdayPeople || 0}" min="0" max="20" ${ro}><small>Quantas pessoas a geração escala ao sábado (só abre de manhã)</small></div>
+      <div class="field-inline"><label for="cfg-saturdayPeople">Pessoas ao sábado</label><input type="number" id="cfg-saturdayPeople" data-cfg="rule" data-k="saturdayPeople" value="${+c.saturdayPeople || 0}" min="0" max="20" ${ro}><small>Quantas pessoas a geração escala ao sábado; é também o mínimo ao balcão nesse dia (o mínimo geral não se aplica)</small></div>
       <div class="field-inline"><label for="cfg-backofficePerDay">Backoffice por dia</label><input type="number" id="cfg-backofficePerDay" data-cfg="rule" data-k="backofficePerDay" value="${+c.backofficePerDay || 0}" min="0" max="10" ${ro}><small>Pessoas fora do balcão, que podem reforçar nas horas de ponta</small></div>
       <div class="field-inline"><label for="cfg-weeklyHours">Horas por semana</label><input type="number" id="cfg-weeklyHours" data-cfg="rule" data-k="weeklyHours" value="${+c.weeklyHours || 0}" min="0" max="80" step="0.5" ${ro}><small>Mínimo de cada pessoa, salvo valor próprio na ficha</small></div>
       <div class="field-inline"><label for="cfg-dayHours">Dia completo (h)</label><input type="number" id="cfg-dayHours" data-cfg="rule" data-k="dayHours" value="${+c.dayHours || 8}" min="1" max="24" step="0.5" ${ro}><small>Descontar isto do banco num dia equivale a uma folga</small></div>
