@@ -154,6 +154,27 @@ exportação e importação em JSON.
 | PUT | `/api/config` | Guarda turnos e regras |
 | POST | `/api/import` | Substitui tudo por uma cópia em JSON |
 
+## Banco de horas, férias e postos
+
+- **Mínimo semanal**: cada pessoa tem de chegar às horas da semana (40 h por omissão,
+  com valor próprio na ficha para quem faz part-time). As horas descontadas do banco
+  contam para esse mínimo; quem ficar abaixo aparece nos alertas da semana.
+- **Dia de plantão**: em cada turno desse dia escolhes, no menu da célula, se as horas
+  são **pagas** ou vão para o **banco de horas**. As que vão para o banco entram pelo
+  valor já majorado (a noite de serviço conta 21 h).
+- **Saldo inicial**: a ficha de cada funcionário tem *Banco de horas já acumulado*, para
+  lançares as horas de antes de usares a aplicação. Pode ser negativo.
+- **Descontar horas**: no menu da célula escolhes −2 h, −4 h, −6 h ou um dia inteiro.
+  Descontar o equivalente a um dia (8 h por omissão) transforma o dia numa folga paga
+  pelo banco. A aplicação avisa se o saldo não chega.
+- **Férias**: marcam-se dia a dia no menu da célula, ou de uma vez no botão *Férias* da
+  ficha, indicando o período. Dias de férias não recebem turnos na geração automática e
+  descontam um dia ao mínimo dessa semana.
+- **Balcão e backoffice**: cada turno atribuído pode estar ao *balcão* ou em
+  *backoffice*. O gráfico de presença e o mínimo ao balcão só contam quem está ao
+  balcão; quem está em backoffice aparece numa linha própria e serve de reforço nas
+  horas de ponta. Por omissão são 3 ao balcão e 1 em backoffice por dia.
+
 ## Regras implementadas
 
 - **Turnos**: entradas às 9h, 10h e 11h (8 h de trabalho + 1 h de almoço) e noite de

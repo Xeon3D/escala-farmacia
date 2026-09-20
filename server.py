@@ -26,7 +26,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.5.0"
 
 ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT / "public"
@@ -44,7 +44,7 @@ ID_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,60}$")
 WEEK_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 DEFAULT_SHIFTS = [
-    {"id": "s9",  "name": "Abertura",         "short": "9h",  "start": "09:00", "end": "18:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 1, "weekend": 1},
+    {"id": "s9",  "name": "Abertura",         "short": "9h",  "start": "09:00", "end": "18:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 1, "weekend": 2},
     {"id": "s10", "name": "Intermédio",       "short": "10h", "start": "10:00", "end": "19:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 1, "weekend": 0},
     {"id": "s11", "name": "Fecho",            "short": "11h", "start": "11:00", "end": "20:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 2, "weekend": 1},
     {"id": "N",   "name": "Noite de serviço", "short": "N",   "start": "19:00", "end": "07:00", "lunch": False, "night": True,  "onlyDuty": True,  "weekday": 1, "weekend": 1},
@@ -54,11 +54,14 @@ DEFAULT_SETTINGS = {
     "lunchFrom": "12:00",
     "lunchTo": "16:00",
     "lunchMin": 60,
-    "minPresent": 1,
+    "minPresent": 3,
     "minRest": 11,
     "doubleFrom": "22:00",
     "doubleTo": "09:00",
     "doubleFactor": 2,
+    "weeklyHours": 40,
+    "dayHours": 8,
+    "backofficePerDay": 1,
     "dutyAnchorWeek": "2026-09-14",
     "dutyAnchorDay": 6,
     "dutyStep": 1,
@@ -88,7 +91,9 @@ CREATE TABLE IF NOT EXISTS employees (
   days_off      TEXT NOT NULL DEFAULT '[]',
   max_per_week  INTEGER NOT NULL DEFAULT 5,
   fixed         TEXT NOT NULL DEFAULT '{}',
-  notes         TEXT NOT NULL DEFAULT ''
+  notes         TEXT NOT NULL DEFAULT '',
+  weekly_hours  REAL,
+  bank_initial  REAL NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS shifts (
   id        TEXT PRIMARY KEY,
@@ -107,8 +112,12 @@ CREATE TABLE IF NOT EXISTS assignments (
   week     TEXT NOT NULL,
   day      INTEGER NOT NULL,
   emp_id   TEXT NOT NULL,
-  shift_id TEXT NOT NULL,
+  shift_id TEXT NOT NULL DEFAULT '',
   lunch    TEXT NOT NULL DEFAULT '',
+  pay      TEXT NOT NULL DEFAULT '',
+  bank_hours REAL NOT NULL DEFAULT 0,
+  post     TEXT NOT NULL DEFAULT '',
+  kind     TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (week, day, emp_id),
   FOREIGN KEY (emp_id) REFERENCES employees(id) ON DELETE CASCADE
 );
@@ -153,7 +162,25 @@ def connect(path: Path) -> sqlite3.Connection:
     return c
 
 
+def migrate() -> None:
+    """Acrescenta colunas novas a bases de dados criadas por versões anteriores."""
+    additions = {
+        "employees": {"weekly_hours": "REAL", "bank_initial": "REAL NOT NULL DEFAULT 0"},
+        "assignments": {"pay": "TEXT NOT NULL DEFAULT ''", "bank_hours": "REAL NOT NULL DEFAULT 0",
+                        "post": "TEXT NOT NULL DEFAULT ''", "kind": "TEXT NOT NULL DEFAULT ''"},
+    }
+    with lock:
+        for table, columns in additions.items():
+            have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+            for name, decl in columns.items():
+                if name not in have:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+                    print(f"Base de dados: coluna {table}.{name} acrescentada.")
+        conn.commit()
+
+
 def init_data() -> None:
+    migrate()
     with lock:
         if not conn.execute("SELECT 1 FROM shifts LIMIT 1").fetchone():
             for i, s in enumerate(DEFAULT_SHIFTS):
@@ -515,16 +542,28 @@ def read_state() -> dict:
                 "acceptsNight": bool(r["accepts_night"]), "acceptsWeekend": bool(r["accepts_weekend"]),
                 "preferred": json.loads(r["preferred"]), "daysOff": json.loads(r["days_off"]),
                 "maxPerWeek": r["max_per_week"], "fixed": json.loads(r["fixed"]), "notes": r["notes"],
+                "weeklyHours": r["weekly_hours"], "bankInitial": r["bank_initial"] or 0,
             }
             for r in conn.execute("SELECT * FROM employees")
         }
         schedules: dict[str, dict] = {}
         for r in conn.execute("SELECT * FROM assignments"):
             week = schedules.setdefault(r["week"], {"cells": {}})
-            cell = {"s": r["shift_id"]}
+            cell = {}
+            if r["shift_id"]:
+                cell["s"] = r["shift_id"]
             if r["lunch"]:
                 cell["l"] = r["lunch"]
-            week["cells"].setdefault(r["emp_id"], {})[str(r["day"])] = cell
+            if r["pay"]:
+                cell["pay"] = r["pay"]
+            if r["bank_hours"]:
+                cell["bank"] = r["bank_hours"]
+            if r["post"]:
+                cell["post"] = r["post"]
+            if r["kind"] == "vac":
+                cell["vac"] = True
+            if cell:
+                week["cells"].setdefault(r["emp_id"], {})[str(r["day"])] = cell
     config = dict(settings)
     config["shifts"] = shifts
     return {"config": config, "employees": employees, "schedules": schedules}
@@ -535,18 +574,21 @@ def read_state() -> dict:
 def save_employee(eid: str, e: dict) -> None:
     with lock:
         conn.execute(
-            "INSERT INTO employees (id,name,role,color,accepts_night,accepts_weekend,preferred,days_off,max_per_week,fixed,notes)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+            "INSERT INTO employees (id,name,role,color,accepts_night,accepts_weekend,preferred,days_off,max_per_week,fixed,notes,weekly_hours,bank_initial)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
             " ON CONFLICT(id) DO UPDATE SET name=excluded.name, role=excluded.role, color=excluded.color,"
             " accepts_night=excluded.accepts_night, accepts_weekend=excluded.accepts_weekend,"
             " preferred=excluded.preferred, days_off=excluded.days_off, max_per_week=excluded.max_per_week,"
-            " fixed=excluded.fixed, notes=excluded.notes",
+            " fixed=excluded.fixed, notes=excluded.notes, weekly_hours=excluded.weekly_hours,"
+            " bank_initial=excluded.bank_initial",
             (
                 eid, str(e.get("name", ""))[:80], str(e.get("role", ""))[:80], str(e.get("color", "#0A7A5A"))[:20],
                 int(bool(e.get("acceptsNight"))), int(bool(e.get("acceptsWeekend"))),
                 json.dumps(e.get("preferred") or []), json.dumps(e.get("daysOff") or []),
                 max(1, min(7, int(e.get("maxPerWeek") or 5))), json.dumps(e.get("fixed") or {}),
                 str(e.get("notes", ""))[:500],
+                None if e.get("weeklyHours") in (None, "") else max(0.0, min(80.0, float(e["weeklyHours"]))),
+                max(-2000.0, min(2000.0, float(e.get("bankInitial") or 0))),
             ),
         )
         conn.commit()
@@ -571,15 +613,26 @@ def save_week(week: str, cells: dict) -> None:
                 continue
             if not 0 <= d <= 6 or not cell:
                 continue
-            sid = cell if isinstance(cell, str) else cell.get("s")
-            if not sid:
+            if isinstance(cell, str):
+                sid, lunch, pay, bank, post, kind = cell, "", "", 0.0, "", ""
+            else:
+                sid = str(cell.get("s") or "")[:60]
+                lunch = str(cell.get("l") or "")[:5]
+                pay = "bank" if cell.get("pay") == "bank" else ""
+                post = "back" if cell.get("post") == "back" else ""
+                kind = "vac" if cell.get("vac") else ""
+                try:
+                    bank = max(0.0, min(24.0, float(cell.get("bank") or 0)))
+                except (TypeError, ValueError):
+                    bank = 0.0
+            if not sid and not bank and not kind:
                 continue
-            lunch = "" if isinstance(cell, str) else str(cell.get("l") or "")[:5]
-            rows.append((week, d, str(emp_id), str(sid)[:60], lunch))
+            rows.append((week, d, str(emp_id), sid, lunch, pay, bank, post, kind))
     with lock:
         conn.execute("DELETE FROM assignments WHERE week=?", (week,))
         conn.executemany(
-            "INSERT OR REPLACE INTO assignments (week,day,emp_id,shift_id,lunch) VALUES (?,?,?,?,?)", rows
+            "INSERT OR REPLACE INTO assignments (week,day,emp_id,shift_id,lunch,pay,bank_hours,post,kind)"
+            " VALUES (?,?,?,?,?,?,?,?,?)", rows
         )
         conn.commit()
 
