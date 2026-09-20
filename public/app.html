@@ -592,6 +592,9 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
   </form>
 </dialog>
 
+<!-- Fora da vista: a vista é redesenhada quando a janela recupera o foco (ao fechar o seletor de ficheiros) e um input aí dentro perdia o evento. -->
+<input type="file" id="pref-logo" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" hidden>
+
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script>
@@ -2067,7 +2070,7 @@ function renderPrefs() {
         <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
           ${logo ? `<img class="logo-preview" src="${logo}" alt="Logótipo atual">` : '<svg class="cross" style="width:64px;height:64px" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="var(--accent)"/><path d="M16 8h8v8h8v8h-8v8h-8v-8H8v-8h8z" fill="var(--on-accent)"/></svg>'}
           <span style="display:flex;gap:8px;flex-wrap:wrap">
-            <label class="btn" style="cursor:pointer;text-transform:none;letter-spacing:0;font-size:inherit;color:inherit">Escolher imagem<input type="file" id="pref-logo" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" hidden ${ro}></label>
+            <button type="button" class="btn" data-action="pref-logo-pick" ${ro}>Escolher imagem</button>
             ${logo ? `<button class="btn" data-action="pref-logo-clear" ${ro}>Usar o símbolo original</button>` : ''}
           </span>
         </div>
@@ -2696,6 +2699,7 @@ document.addEventListener('click', async ev => {
       state.cfgDraft = clone(DEFAULT_CONFIG); state.cfgDirty = true; render(); break;
     case 'cfg-discard': state.cfgDraft = null; state.cfgDirty = false; render(); break;
     case 'pref-discard': state.prefsDraft = null; render(); break;
+    case 'pref-logo-pick': { const f = $('#pref-logo'); f.value = ''; f.click(); break; }
     case 'pref-logo-clear': {
       state.prefsDraft = { ...(state.prefsDraft || { siteTitle: cfg().siteTitle || '', siteTagline: cfg().siteTagline || '' }), siteLogo: '' };
       render(); break;
