@@ -182,6 +182,10 @@ table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:980px}
 .changelog{margin:0 0 8px}.changelog ul{margin:4px 0 0;padding-left:18px}.changelog li{margin:2px 0}.facts .muted{color:var(--ink-3)}
 .dot.tone-vac{background:var(--vac-dot)}
 .cell.tone-sick{background:var(--sick-bg);color:var(--sick-ink)}
+.cell.locked{outline:2px solid var(--ink-3);outline-offset:-2px}
+.cell .pin.lockpin{left:auto;right:5px;top:auto;bottom:2px;opacity:1;font-size:11px}
+.cell .pin.backpin ~ .pin.lockpin{right:44px}
+.menu .locknote{padding:8px 10px;font-size:12px;color:var(--warn)}
 .cell.tone-xoff{background:var(--n-bg);color:var(--n-ink);border:1px dashed var(--n-ink)}
 .dot.tone-xoff{background:var(--n-ink)}
 .dot.tone-sick{background:var(--sick-dot)}
@@ -1013,11 +1017,12 @@ function getCell(wk, id, d) {
   if (d > 6) { wk = shiftWeek(wk, 1); d -= 7; }
   const raw = state.schedules[wk]?.cells?.[id]?.[d];
   if (!raw) return null;
-  if (typeof raw === 'string') return raw ? { s: raw, sh: shiftOn(shiftById(raw), d), l: '', pay: '', bank: 0, post: '', vac: false, sick: false, xoff: false, hrs: 0, from: '', less: 0 } : null;
+  if (typeof raw === 'string') return raw ? { s: raw, sh: shiftOn(shiftById(raw), d), l: '', pay: '', bank: 0, post: '', vac: false, sick: false, xoff: false, lock: false, hrs: 0, from: '', less: 0 } : null;
   const s = raw.s || '', bank = +raw.bank || 0, vac = !!raw.vac, sick = !vac && !!raw.sick, xoff = !vac && !sick && !!raw.xoff, hrs = s ? 0 : Math.max(0, +raw.hrs || 0);
-  if (!s && !bank && !vac && !sick && !xoff && !hrs) return null;
+  const lock = !!raw.lock; // bloqueada: nada a altera até ser desbloqueada (pode ser uma folga bloqueada)
+  if (!s && !bank && !vac && !sick && !xoff && !hrs && !lock) return null;
   return {
-    s, sh: s ? shiftOn(shiftById(s), d) : null, l: raw.l || '', bank, vac, sick, xoff,
+    s, sh: s ? shiftOn(shiftById(s), d) : null, l: raw.l || '', bank, vac, sick, xoff, lock,
     pay: raw.pay === 'bank' ? 'bank' : '', post: raw.post === 'back' ? 'back' : '',
     /* Extras: horas feitas nesse dia e, se souberes, a hora a que entrou. Turnos: horas a menos (chegou tarde / saiu cedo). */
     hrs, from: validTime(raw.from) ? raw.from : '', less: s ? Math.max(0, +raw.less || 0) : 0,
@@ -1175,6 +1180,7 @@ function cellIssues(e, id, wk, d, cell, lookup = getCell, both = false) {
     if (cell.xoff && lookup(wk, id, d - 1)?.sh?.night) out.push({ lvl: 'warn', msg: 'O dia a seguir à noite já é folga obrigatória; a folga extra deve ficar noutro dia' });
     return out;
   }
+  if (!sh && !cell.bank && !cell.hrs && cell.lock) return out; // folga bloqueada
   if (!sh && cell.bank) {
     const saldo = bankBefore(id, wk);
     if (cell.bank > saldo) out.push({ lvl: 'bad', msg: `Só tem ${fmtH(Math.max(0, saldo))} h no banco antes desta semana` });
@@ -1300,9 +1306,17 @@ function generate(wk) {
   const count = {}, nights = {}, hours = {};
   ids.forEach(id => {
     count[id] = 0; nights[id] = 0; hours[id] = 0;
-    /* Mantém férias, baixas, folgas extra e folgas já pagas pelo banco de horas */
+    /* Mantém células bloqueadas, férias, baixas, folgas extra e folgas já pagas pelo banco de horas */
     for (let d = 0; d < 7; d++) {
       const c = getCell(wk, id, d);
+      if (c?.lock) {
+        cells[id][d] = cellRaw(c);
+        if (c.sh) { count[id]++; hours[id] += cellHours(c).normal; if (c.sh.night) nights[id]++; }
+        else if (c.hrs) hours[id] += cellHours(c).normal;
+        else if (c.vac || c.sick || c.xoff) hours[id] += dayHours();
+        else if (c.bank) hours[id] += c.bank;
+        continue;
+      }
       if (c?.vac) { cells[id][d] = { vac: true }; hours[id] += dayHours(); }
       else if (c?.sick) { cells[id][d] = { sick: true }; hours[id] += dayHours(); }
       else if (c?.xoff) { cells[id][d] = { xoff: true }; hours[id] += dayHours(); }
@@ -1419,14 +1433,15 @@ function generate(wk) {
     if (backAlvo) {
       const doDia = ids.filter(id => {
         const sh = shiftById(cells[id][d]?.s);
-        return sh && !sh.night && !sh.onlyDuty && cells[id][d].post !== 'back';
+        return sh && !sh.night && !sh.onlyDuty && cells[id][d].post !== 'back' && !cells[id][d].lock;
       }).sort((a, b) => toMin(shiftById(cells[b][d].s).start) - toMin(shiftById(cells[a][d].s).start));
       doDia.slice(0, Math.min(backAlvo, Math.max(0, doDia.length - Math.max(0, +cfg().minPresent || 0))))
         .forEach(id => { cells[id][d].post = 'back'; });
     }
     /* Almoços desencontrados, por ordem de entrada. */
     const taken = [];
-    ids.filter(id => shiftOn(shiftById(cells[id][d]?.s), d)?.lunch)
+    ids.filter(id => cells[id][d]?.lock && cells[id][d].l).forEach(id => taken.push(toMin(cells[id][d].l)));
+    ids.filter(id => shiftOn(shiftById(cells[id][d]?.s), d)?.lunch && !cells[id][d].lock)
       .sort((a, b) => toMin(shiftById(cells[a][d].s).start) - toMin(shiftById(cells[b][d].s).start))
       .forEach(id => { const l = pickLunch(shiftOn(shiftById(cells[id][d].s), d), taken); if (l) { cells[id][d].l = l; taken.push(toMin(l)); } });
   }
@@ -1590,9 +1605,9 @@ function renderSchedule() {
         ? (c.sh ? `${c.sh.name} ${c.sh.start}–${c.sh.end}${c.l ? `, almoço ${c.l}` : ''}${c.less ? `, menos ${fmtH(c.less)} h` : ''}${c.pay === 'bank' ? ', horas para o banco' : ''}`
           : c.hrs ? `${fmtH(c.hrs)} h como extra${c.from ? ` a partir das ${c.from}` : ''}`
           : c.bank ? `desconto de ${fmtH(c.bank)} h do banco${isFullDayOff(c) ? ' (folga)' : ''}`
-          : c.vac ? 'férias' : c.sick ? 'baixa médica' : c.xoff ? 'folga extra do plantão de fim de semana' : 'turno removido')
+          : c.vac ? 'férias' : c.sick ? 'baixa médica' : c.xoff ? 'folga extra do plantão de fim de semana' : c.lock ? 'folga' : 'turno removido')
         : 'folga';
-      const label = `${e.name}, ${DAYS_LONG[d]}: ${desc}${iss.length ? ' — ' + iss.map(i => i.msg).join('; ') : ''}`;
+      const label = `${e.name}, ${DAYS_LONG[d]}: ${desc}${c?.lock ? ' (bloqueada)' : ''}${iss.length ? ' — ' + iss.map(i => i.msg).join('; ') : ''}`;
       let tone = 'empty', inner = '<span>folga</span>';
       if (c?.sh) {
         tone = toneOf(c.sh) + (isBackoffice(c) ? ' back' : '');
@@ -1616,8 +1631,9 @@ function renderSchedule() {
       } else if (c?.bank) {
         tone = 'tone-bank';
         inner = `<b>−${fmtH(c.bank)} h</b><span>banco</span>${isFullDayOff(c) ? '<span class="lu">folga</span>' : ''}`;
-      } else if (c) { tone = 'tone-x'; inner = '<b>?</b><span>removido</span>'; }
-      tds += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}"><button class="cell ${tone} ${worst && worst !== 'info' ? 'has-' + worst : ''}" data-action="cell" data-id="${esc(id)}" data-d="${d}" title="${esc(label)}" aria-label="${esc(label)}" aria-haspopup="menu" ${state.readOnly ? 'disabled' : ''}>${inner}${e.fixed?.[d] ? '<i class="pin">fixo</i>' : ''}${c?.pay === 'bank' ? '<i class="pin bankpin">banco</i>' : ''}${isBackoffice(c) ? '<i class="pin backpin">back</i>' : ''}${c?.less ? `<i class="pin lesspin">−${fmtH(c.less)}h</i>` : ''}${worst === 'bad' || worst === 'warn' ? '<i class="flag"></i>' : ''}</button></td>`;
+      } else if (c?.lock) { tone = 'empty'; inner = '<span>folga</span>'; }
+      else if (c) { tone = 'tone-x'; inner = '<b>?</b><span>removido</span>'; }
+      tds += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}"><button class="cell ${tone} ${c?.lock ? 'locked' : ''} ${worst && worst !== 'info' ? 'has-' + worst : ''}" data-action="cell" data-id="${esc(id)}" data-d="${d}" title="${esc(label)}" aria-label="${esc(label)}" aria-haspopup="menu" ${state.readOnly ? 'disabled' : ''}>${inner}${e.fixed?.[d] ? '<i class="pin">fixo</i>' : ''}${c?.pay === 'bank' ? '<i class="pin bankpin">banco</i>' : ''}${isBackoffice(c) ? '<i class="pin backpin">back</i>' : ''}${c?.less ? `<i class="pin lesspin">−${fmtH(c.less)}h</i>` : ''}${c?.lock ? '<i class="pin lockpin" title="Bloqueada">🔒</i>' : ''}${worst === 'bad' || worst === 'warn' ? '<i class="flag"></i>' : ''}</button></td>`;
     }
     const over = false;
     if (st.xoffOwed) alerts.push({ lvl: 'warn', who: e.name, when: 'Semana', msg: `Tem direito a ${st.xoffOwed === 1 ? 'uma folga extra' : st.xoffOwed + ' folgas extra'} pela noite de plantão ao fim de semana — ainda não está marcada` });
@@ -2355,7 +2371,12 @@ function openMenu(btn) {
       <button class="lchip ${cur.post === 'back' ? 'cur' : ''}" data-action="post" data-post="back">Backoffice</button>
     </div></div>`;
   }
-  menu.innerHTML = `${head}${extraPick}${opts}${extraOpts}${postPick}${lessPick}${dutyPick}${lunch}${e.extra ? '' : bankPick}`;
+  const lockOpt = `<button class="opt" role="menuitem" data-action="lock" data-on="${cur?.lock ? '' : '1'}">
+      <span class="dot" style="background:var(--ink-3)"></span>
+      <span><b>${cur?.lock ? 'Desbloquear' : 'Bloquear'}</b><small>${cur?.lock ? 'volta a poder ser alterada' : 'nada altera esta célula (nem gerar, nivelar, copiar ou limpar) até ser desbloqueada'}</small></span></button>`;
+  menu.innerHTML = cur?.lock
+    ? `${head}<div class="locknote">🔒 Célula bloqueada — desbloqueia para alterar.</div>${lockOpt}`
+    : `${head}${extraPick}${opts}${extraOpts}${lockOpt}${postPick}${lessPick}${dutyPick}${lunch}${e.extra ? '' : bankPick}`;
   menu.hidden = false;
   const r = btn.getBoundingClientRect();
   const mw = menu.offsetWidth, mh = menu.offsetHeight;
@@ -2375,8 +2396,9 @@ function closeMenu(refocus) {
   if (menuCtx?.btn) { menuCtx.btn.classList.remove('selected'); if (refocus) menuCtx.btn.focus(); }
   menuCtx = null;
 }
-function writeCell(id, d, value) {
+function writeCell(id, d, value, force = false) {
   const wk = state.week;
+  if (!force && isLocked(wk, id, d)) { toast('Esta célula está bloqueada. Desbloqueia-a primeiro.'); return; }
   const sched = clone(state.schedules[wk] || { cells: {} });
   sched.cells = sched.cells || {};
   sched.cells[id] = sched.cells[id] || {};
@@ -2402,17 +2424,19 @@ function setLunch(id, d, l) {
 /** Reduz uma célula lida ao que vai para a base de dados. */
 function cellRaw(c) {
   if (!c) return null;
-  if (c.vac) return { vac: true };
-  if (c.sick) return { sick: true };
-  if (c.xoff) return { xoff: true };
-  const v = {};
+  const L = c.lock ? { lock: true } : {};
+  if (c.vac) return { vac: true, ...L };
+  if (c.sick) return { sick: true, ...L };
+  if (c.xoff) return { xoff: true, ...L };
+  const v = { ...L };
   if (c.sh) { v.s = c.sh.id; if (c.l) v.l = c.l; if (c.pay) v.pay = c.pay; if (c.less) v.less = c.less; }
   else if (c.hrs) { v.hrs = c.hrs; if (c.from) v.from = c.from; }
   else if (c.bank) { v.bank = c.bank; return v; }
-  else return null;
+  else return c.lock ? v : null;
   if (c.post) v.post = c.post;
   return v;
 }
+const isLocked = (wk, id, d) => !!getCell(wk, id, d)?.lock;
 const cellBase = cur => worksOn(cur) ? cellRaw(cur) : null;
 /** Horas avulsas de um extra nesse dia (0 retira). */
 function setExtraHours(id, d, hrs, from) {
@@ -2447,6 +2471,13 @@ function setPost(id, d, post) {
   if (post) v.post = post; else delete v.post;
   writeCell(id, d, v);
 }
+/** Bloqueia ou desbloqueia a célula (mantendo o que lá está; uma folga bloqueada fica {lock:true}). */
+function setLock(id, d, on) {
+  const cur = getCell(state.week, id, d);
+  const raw = cellRaw(cur) || {};
+  if (on) raw.lock = true; else delete raw.lock;
+  writeCell(id, d, Object.keys(raw).length ? raw : null, true);
+}
 function setVacation(id, d, on) {
   writeCell(id, d, on ? { vac: true } : null);
 }
@@ -2467,6 +2498,7 @@ function setVacationRange(id, fromISO, toISO, on) {
     sched.cells = sched.cells || {};
     sched.cells[id] = sched.cells[id] || {};
     for (const d of dias_) {
+      if (sched.cells[id][d]?.lock) continue;
       if (on === 'sick') sched.cells[id][d] = { sick: true };
       else if (on) sched.cells[id][d] = { vac: true };
       else if (sched.cells[id][d]?.vac || sched.cells[id][d]?.sick) delete sched.cells[id][d];
@@ -2500,7 +2532,7 @@ function levelWeek(wk) {
     if (workers.length < 2) continue;
     const assign = {}; workers.forEach(id => { assign[id] = getCell(wk, id, d).s; });
     const back = {}; workers.forEach(id => { back[id] = getCell(wk, id, d).post === 'back'; });
-    const fixed = {}; workers.forEach(id => { fixed[id] = !!normId(state.employees[id].fixed?.[d]); });
+    const fixed = {}; workers.forEach(id => { fixed[id] = !!normId(state.employees[id].fixed?.[d]) || !!getCell(wk, id, d).lock; });
     const counts = () => {
       const out = [];
       for (let t = oa; t < ob; t += 30) {
@@ -2547,7 +2579,8 @@ function levelWeek(wk) {
     workers.sort((a, b) => toMin(shiftById(assign[a]).start) - toMin(shiftById(assign[b]).start)).forEach(id => {
       const c = getCell(wk, id, d), raw = cellRaw(c); raw.s = assign[id]; delete raw.l;
       const sh = shiftOn(shiftById(assign[id]), d);
-      if (sh.lunch) { const l = changed.includes(id) || !c.l ? pickLunch(sh, taken) : c.l; if (l) { raw.l = l; taken.push(toMin(l)); } }
+      if (c.lock) { if (c.l) { raw.l = c.l; taken.push(toMin(c.l)); } }
+      else if (sh.lunch) { const l = changed.includes(id) || !c.l ? pickLunch(sh, taken) : c.l; if (l) { raw.l = l; taken.push(toMin(l)); } }
       sched.cells[id] = sched.cells[id] || {}; sched.cells[id][d] = raw;
     });
   }
@@ -2561,7 +2594,8 @@ function redistributeLunches() {
   sched.cells = sched.cells || {};
   for (let d = 0; d < 7; d++) {
     const taken = [];
-    ids.map(id => ({ id, c: getCell(wk, id, d) })).filter(x => x.c?.sh?.lunch)
+    ids.map(id => ({ id, c: getCell(wk, id, d) })).filter(x => x.c?.lock && x.c.l).forEach(x => taken.push(toMin(x.c.l)));
+    ids.map(id => ({ id, c: getCell(wk, id, d) })).filter(x => x.c?.sh?.lunch && !x.c.lock)
       .sort((a, b) => toMin(a.c.sh.start) - toMin(b.c.sh.start))
       .forEach(({ id, c }) => {
         const l = pickLunch(c.sh, taken);
@@ -2725,7 +2759,7 @@ document.addEventListener('click', async ev => {
   if (!el) { if (!ev.target.closest('#menu')) closeMenu(); return; }
   const a = el.dataset.action;
   if (['my-avatar', 'my-password', 'logout'].includes(a)) state.userMenuOpen = false;
-  if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation', 'sick', 'xoff', 'less', 'extra-hours'].includes(a)) closeMenu();
+  if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation', 'sick', 'xoff', 'lock', 'less', 'extra-hours'].includes(a)) closeMenu();
   switch (a) {
     case 'tab': state.tab = el.dataset.tab; ls.set('escala.tab', state.tab); render(); window.scrollTo(0, 0); break;
     case 'logout':
@@ -2826,6 +2860,12 @@ document.addEventListener('click', async ev => {
       writeCell(ctx.id, ctx.d, el.dataset.on ? { xoff: true } : null);
       break;
     }
+    case 'lock': {
+      const ctx = menuCtx; if (!ctx) break; closeMenu();
+      setLock(ctx.id, ctx.d, !!el.dataset.on);
+      toast(el.dataset.on ? 'Célula bloqueada.' : 'Célula desbloqueada.');
+      break;
+    }
     case 'vac-range': openVacation(el.dataset.id); break;
     case 'bank-report': openBankReport(el.dataset.id); break;
     case 'bank-off': {
@@ -2852,12 +2892,20 @@ document.addEventListener('click', async ev => {
       if (hasCells(state.week) && !await confirmBox('Copiar semana anterior', 'Os turnos desta semana vão ser substituídos pelos da semana anterior. O plantão mudou de dia, por isso confirma as noites depois.', 'Substituir')) break;
       const cells = {};
       for (const id in prev) if (state.employees[id]) cells[id] = clone(prev[id]);
+      /* As células bloqueadas desta semana ficam como estão. */
+      const atual = state.schedules[state.week]?.cells || {};
+      for (const id in atual) for (const d in atual[id]) if (atual[id][d]?.lock) { (cells[id] = cells[id] || {})[d] = clone(atual[id][d]); }
+      for (const id in cells) for (const d in cells[id]) if (cells[id][d]?.lock && !atual[id]?.[d]?.lock) delete cells[id][d].lock; // o bloqueio não se copia
       store.saveWeek(state.week, { cells, updatedAt: new Date().toISOString() });
       render(); toast('Turnos copiados. Atenção: o plantão desta semana é ' + DAYS_LONG[dutyDay(state.week)].toLowerCase() + '.'); break;
     }
     case 'clear':
-      if (!await confirmBox('Limpar semana', `Remover todos os turnos de ${weekRange(state.week)}?`, 'Limpar', true)) break;
-      store.saveWeek(state.week, { cells: {}, updatedAt: new Date().toISOString() });
+      if (!await confirmBox('Limpar semana', `Remover todos os turnos de ${weekRange(state.week)}? As células bloqueadas ficam.`, 'Limpar', true)) break;
+      {
+        const keep = {}, atual = state.schedules[state.week]?.cells || {};
+        for (const id in atual) for (const d in atual[id]) if (atual[id][d]?.lock) (keep[id] = keep[id] || {})[d] = clone(atual[id][d]);
+        store.saveWeek(state.week, { cells: keep, updatedAt: new Date().toISOString() });
+      }
       render(); toast('Semana limpa.'); break;
     case 'print': window.print(); break;
     case 'new': openEditor(null); break;

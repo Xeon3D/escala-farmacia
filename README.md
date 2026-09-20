@@ -198,6 +198,9 @@ exportação e importação em JSON.
 - **Férias**: marcam-se dia a dia no menu da célula, ou de uma vez no botão *Férias* da
   ficha, indicando o período. Dias de férias não recebem turnos na geração automática e
   descontam um dia ao mínimo dessa semana.
+- **Bloquear**: no menu da célula, «Bloquear» fixa o que lá está (turno, folga, férias…):
+  nada a altera — nem gerar, nivelar, distribuir almoços, copiar a semana anterior ou
+  limpar a semana, nem edições à mão — até ser desbloqueada. Aparece com 🔒.
 - **Balcão e backoffice**: cada turno atribuído pode estar ao *balcão* ou em
   *backoffice*. O gráfico de presença e o mínimo ao balcão só contam quem está ao
   balcão; quem está em backoffice aparece numa linha própria e serve de reforço nas
