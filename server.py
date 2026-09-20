@@ -908,19 +908,30 @@ img{max-width:100%}
 """
 
 
-def daily_phrase() -> str:
-    """Frase do dia, lida de public/frases.txt: a mesma durante todo o dia, muda à meia-noite."""
+def phrases() -> list[str]:
     try:
         lines = [ln.strip() for ln in (PUBLIC / "frases.txt").read_text(encoding="utf-8").splitlines()]
     except OSError:
-        return ""
-    frases = [ln for ln in lines if ln and not ln.startswith("#")]
+        return []
+    return [ln[:200] for ln in lines if ln and not ln.startswith("#")]
+
+
+def daily_phrase() -> str:
+    """Frase do dia, lida de public/frases.txt: a mesma durante todo o dia, muda à meia-noite."""
+    frases = phrases()
     if not frases:
         return ""
     day = int(time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1)) // 86400)
     # Baralha de forma estável para não seguir a ordem do ficheiro.
     idx = int(hashlib.sha256(str(day).encode()).hexdigest(), 16) % len(frases)
-    return frases[idx][:200]
+    return frases[idx]
+
+
+def random_phrase(not_this: str = "") -> str:
+    """Outra frase ao acaso (diferente da atual, quando há mais do que uma)."""
+    frases = phrases()
+    pool = [f for f in frases if f != not_this] or frases
+    return secrets.choice(pool) if pool else ""
 
 
 def site_title() -> str:
@@ -1019,6 +1030,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/health":
             return self.send_json({"ok": True, "version": APP_VERSION})
         if path == "/api/frase":
+            import urllib.parse
+            q = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            if q.get("random"):
+                return self.send_json({"text": random_phrase((q.get("not") or [""])[0][:200])})
             return self.send_json({"text": daily_phrase()})
         if path == "/api/app":
             if not self.require(admin=False):

@@ -79,6 +79,7 @@ button:disabled{cursor:not-allowed;opacity:.55}
 .prefs-form{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;max-width:760px}
 .brand h1{margin:0;font:700 26px/1.1 var(--display);letter-spacing:-.01em;text-wrap:balance}
 .brand p{margin:2px 0 0;color:var(--ink-2);font-size:13px}
+.brand p.joke{cursor:pointer}.brand p.joke:hover{color:var(--ink)}
 .status{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
 .status i{width:7px;height:7px;border-radius:50%;background:var(--ink-3)}
 .status.live i{background:var(--ok)}
@@ -1403,9 +1404,14 @@ function applyBranding() {
   const C = cfg(), title = String(C.siteTitle || '').trim() || DEFAULT_CONFIG.siteTitle;
   $('#brand-title').textContent = title;
   /* Subtítulo fixo, se estiver definido; senão a frase do dia. */
-  const tagline = String(C.siteTagline || '').trim() || state.phrase || '';
-  $('#brand-tagline').textContent = tagline;
-  $('#brand-tagline').hidden = !tagline;
+  const fixed = String(C.siteTagline || '').trim();
+  const tagline = fixed || state.phrase || '';
+  const tl = $('#brand-tagline');
+  tl.textContent = tagline;
+  tl.hidden = !tagline;
+  /* Sem subtítulo fixo, a frase do dia troca por outra ao clicar. */
+  tl.classList.toggle('joke', !fixed && !!state.phrase);
+  tl.title = !fixed && state.phrase ? 'Clica para outra' : '';
   document.title = title;
   const logo = typeof C.siteLogo === 'string' && /^data:image\/(png|jpeg|webp|gif|svg\+xml);base64,/.test(C.siteLogo) ? C.siteLogo : '';
   const holder = $('#brand-logo');
@@ -2539,6 +2545,13 @@ function shiftInUse(sid) {
 const shiftMonth = (key, n) => { const [y, m] = key.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
 
 document.addEventListener('click', async ev => {
+  if (ev.target.closest('#brand-tagline.joke')) {
+    try {
+      const j = await fetch('api/frase?random=1&not=' + encodeURIComponent(state.phrase || '')).then(r => r.ok ? r.json() : null);
+      if (j?.text) { state.phrase = j.text; applyBranding(); }
+    } catch {}
+    return;
+  }
   const el = ev.target.closest('[data-action]');
   if (state.userMenuOpen && !ev.target.closest('.whoami')) { state.userMenuOpen = false; if (state.user) $('#whoami').innerHTML = userMenuHTML(); }
   if (!el) { if (!ev.target.closest('#menu')) closeMenu(); return; }

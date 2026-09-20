@@ -61,7 +61,7 @@ O separador **Definições** junta o que diz respeito à instalação e não à 
 - **Aparência**: título, subtítulo e logótipo mostrados no cabeçalho e no separador do
   navegador. O logótipo (PNG, JPG, WebP ou SVG) é reduzido para 128 px e fica guardado na
   base de dados. Sem subtítulo, o cabeçalho mostra a **frase do dia**, tirada de
-  `public/frases.txt` (uma frase por linha, linhas com `#` são ignoradas; muda à meia-noite).
+  `public/frases.txt` (uma por linha, linhas com `#` são ignoradas): muda à meia-noite e, ao clicar, troca por outra ao acaso. O ficheiro vem com dad jokes em inglês; edita-o à vontade.
 - **Versão da aplicação** (administradores): ver abaixo.
 - **Dados**: exportar e importar uma cópia em JSON.
 

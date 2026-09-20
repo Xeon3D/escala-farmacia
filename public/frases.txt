@@ -1,41 +1,67 @@
-# Uma frase por linha. A aplicação mostra uma por dia, sempre a mesma durante esse dia.
-# Linhas a começar por # são ignoradas.
-Hoje ninguém falta. Amanhã logo se vê.
-O plantão é como o sono: só se dá valor quando não se tem.
-Café: o único medicamento que a equipa toma sem receita.
-A escala está feita. Não é perfeita, mas também tu não és.
-Dorme bem quem fez a noite de serviço… no dia seguinte.
-Almoço desencontrado, balcão sempre acompanhado.
-Onze horas de descanso: o que a lei exige e o gato ignora.
-Se a folga cair a um domingo, ainda conta como folga. Prometemos.
-O banco de horas não dá juros, mas também não fecha à hora de almoço.
-Não é magia, é o gerador automático a fazer o seu melhor.
-Ao balcão como na vida: nunca fiques sozinho às nove da manhã.
-Hoje a farmácia abre às nove. O bom humor abre quando puder.
-Um turno de cada vez. Dois é ganância.
-Quem chega às onze fecha às vinte. Quem chega às nove já se esqueceu.
-A noite de serviço conta a dobrar. O sono em falta também.
-Regra número um: alguém tem de estar ao balcão. Regra número dois: ver regra número um.
-Não há turno mau, há almoço mal marcado.
-As férias estão marcadas. O mar é que ainda não confirmou.
-Backoffice: onde os pedidos se organizam e o café arrefece.
-A semana tem quarenta horas. As outras cento e vinte e oito são tuas.
-Trocar de turno é como trocar de receita: só com autorização.
-Se te faltam horas, o banco empresta. Se te sobram, o banco agradece.
-Hoje é dia de plantão. Os vizinhos já sabem onde bater.
-Escala publicada é escala sagrada. Até ao primeiro telefonema.
-Abertura, intermédio, fecho: a santíssima trindade do horário.
-Uma equipa descansada erra menos. Uma equipa com café erra com estilo.
-A folga extra da noite de sábado é a prova de que a vida é justa. Às vezes.
-Chegaste tarde? Anota as horas a menos. A honestidade também se escala.
-O gráfico do balcão está verde. Respira.
-Quem tem mínimo semanal tem um objetivo. Quem é extra tem liberdade.
-A farmácia fecha ao domingo. O plantão é que não lê o horário.
-Lembra-te: o cliente das 19:59 existe e está a caminho.
-Nenhuma escala sobrevive ao contacto com a segunda-feira.
-Descanso mínimo de onze horas. Sonho máximo de oito.
-Não há conflitos na escala de hoje. Vai já jogar o euromilhões.
-A palavra-passe muda, a equipa fica.
-Um almoço às doze, outro às treze, outro às catorze: a orquestra do balcão.
-Hoje há alguém em backoffice. Amanhã há alguém a perguntar onde está.
-Sê como o turno da manhã: chega cedo e sai antes da confusão.
+# One joke per line. The app shows one per day (same all day) and swaps it for a random one when clicked.
+# Lines starting with # are ignored.
+I used to be a banker, but I lost interest.
+I'm reading a book about anti-gravity. It's impossible to put down.
+Why don't skeletons fight each other? They don't have the guts.
+I only know 25 letters of the alphabet. I don't know y.
+What do you call a fake noodle? An impasta.
+Did you hear about the claustrophobic astronaut? He just needed a little space.
+I told my wife she was drawing her eyebrows too high. She looked surprised.
+Why did the scarecrow win an award? He was outstanding in his field.
+I would tell you a chemistry joke, but I know I wouldn't get a reaction.
+What do you call cheese that isn't yours? Nacho cheese.
+I'm on a seafood diet. I see food and I eat it.
+Why can't you trust atoms? They make up everything.
+How does a penguin build its house? Igloos it together.
+What's brown and sticky? A stick.
+I asked the librarian if the library had books on paranoia. She whispered, "They're right behind you."
+I don't trust stairs. They're always up to something.
+Why did the bicycle fall over? It was two tired.
+What do you call a bear with no teeth? A gummy bear.
+I stayed up all night wondering where the sun went. Then it dawned on me.
+My wife said I should do lunges to stay in shape. That would be a big step forward.
+Why don't eggs tell jokes? They'd crack each other up.
+What did the ocean say to the beach? Nothing, it just waved.
+I used to play piano by ear, but now I use my hands.
+Why did the math book look sad? It had too many problems.
+What do you call a dog that does magic tricks? A labracadabrador.
+I'm terrified of elevators, so I'm taking steps to avoid them.
+Why did the coffee file a police report? It got mugged.
+What do you call a factory that makes okay products? A satisfactory.
+I had a joke about construction, but I'm still working on it.
+Parallel lines have so much in common. It's a shame they'll never meet.
+What's the best thing about Switzerland? I don't know, but the flag is a big plus.
+I'm so good at sleeping I can do it with my eyes closed.
+Why do cows wear bells? Because their horns don't work.
+What did one wall say to the other? I'll meet you at the corner.
+I lost my job at the bank on my first day. A woman asked me to check her balance, so I pushed her over.
+What do you call a sleeping dinosaur? A dino-snore.
+How do you make a tissue dance? Put a little boogie in it.
+I got a job at a bakery because I kneaded dough.
+Why are ghosts such bad liars? You can see right through them.
+The shovel was a ground-breaking invention.
+What did the grape say when it got stepped on? Nothing, it just let out a little wine.
+I'm afraid for the calendar. Its days are numbered.
+Why did the golfer bring two pairs of pants? In case he got a hole in one.
+Did you hear about the kidnapping at the park? They woke him up.
+What do you call a pile of cats? A meow-ntain.
+I asked my dog what two minus two is. He said nothing.
+Why shouldn't you write with a broken pencil? Because it's pointless.
+My boss told me to have a good day. So I went home.
+What do you call a can opener that doesn't work? A can't opener.
+Dear Math, grow up and solve your own problems.
+Where do fruits go on vacation? Pear-is.
+I ordered a chicken and an egg online. I'll let you know.
+Why did the tomato blush? It saw the salad dressing.
+Six-thirty is the best time on a clock, hands down.
+What kind of shoes do ninjas wear? Sneakers.
+I don't play soccer because I enjoy the sport. I'm just doing it for kicks.
+What's orange and sounds like a parrot? A carrot.
+Why was the broom late? It over-swept.
+I've started telling everyone about the benefits of eating dried grapes. It's all about raisin awareness.
+How do you organize a space party? You planet.
+Want to hear a joke about paper? Never mind, it's tearable.
+What do you call a fish with no eyes? A fsh.
+I made a pencil with two erasers. It was pointless.
+Why did the pharmacist walk softly? So as not to wake the sleeping pills.
+What do you call a pharmacist who's always late? A slow-release formula.
