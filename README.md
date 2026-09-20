@@ -257,11 +257,16 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
   trabalhadas** — ficam à parte, na coluna «horas nocturnas», e pagam-se a dobrar. Na
   noite de serviço das 19:00 às 07:00 só as 3 h das 19:00 às 22:00 contam como
   trabalhadas; as 9 h restantes são horas nocturnas.
-- **Horas da semana**: ao gerar a escala, toda a gente (menos os extras) é levada às
-  suas horas semanais (40 h por omissão), preenchendo só os lugares definidos em cada
-  turno (o número de pessoas é o que se quer, não um mínimo). Não há limite de turnos
-  por semana: o que conta são as horas. Quando não consegue (dias indisponíveis,
-  fins de semana curtos, poucos lugares), avisa.
+- **Geração**: não há quotas por turno. O gerador rege-se por três ideias:
+  1. **Segunda a sexta** — toda a gente (menos os extras) trabalha os dias precisos para as
+     suas horas semanais (40 h por omissão) e, em cada dia, os turnos são distribuídos para
+     que o número de pessoas ao balcão seja o mais parecido possível ao longo da abertura
+     (nivelamento automático, sem descer do mínimo de cada faixa).
+  2. **Sábado** — só abre de manhã e escala apenas as «Pessoas ao sábado» (2 por omissão),
+     a rodar por quem fez menos sábados.
+  3. **Domingo** — fechado; só trabalha o plantão quando calha ao domingo.
+  O plantão é sempre o primeiro a ser atribuído (a rodar por quem fez menos noites). Quando
+  alguém não chega às horas (dias indisponíveis, folgas obrigatórias), a semana avisa.
 - **Plantão**: um dia por semana, a recuar um dia por semana. A semana de referência e
   o dia são configuráveis.
 - **Descanso**: mínimo de 11 h entre o fim de um turno e o início do seguinte.

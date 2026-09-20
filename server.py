@@ -75,6 +75,8 @@ DEFAULT_SETTINGS = {
     "siteLogo": "",
     # Verificação automática de novas versões: off, 6h, 12h, 24h, week, month.
     "updateCheck": "week",
+    # Pessoas escaladas ao sábado (a farmácia só abre de manhã).
+    "saturdayPeople": 2,
 }
 UPDATE_INTERVALS = {"off": 0, "6h": 6 * 3600, "12h": 12 * 3600, "24h": 86400, "week": 7 * 86400, "month": 30 * 86400}
 LOGO_RE = re.compile(r"^data:image/(png|jpeg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$")

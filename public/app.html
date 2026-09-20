@@ -645,6 +645,8 @@ const DEFAULT_CONFIG = {
   /* Aparência: título, subtítulo e logótipo (data URL) mostrados no cabeçalho. */
   siteTitle: 'Escala da Farmácia', siteTagline: '', siteLogo: '',
   updateCheck: 'week',
+  /* Sábado: quantas pessoas são precisas (a farmácia só abre de manhã). */
+  saturdayPeople: 2,
 };
 const UPDATE_CHECK_OPTS = [['off', 'Nunca'], ['6h', 'A cada 6 horas'], ['12h', 'A cada 12 horas'], ['24h', 'Todos os dias'], ['week', 'Todas as semanas'], ['month', 'Todos os meses']];
 /* Códigos da primeira versão (Manhã/Tarde) lidos como os turnos atuais */
@@ -816,13 +818,14 @@ function openingSummary() {
   return groups.map(g => `${DAYS[g.from]}${g.to > g.from ? '–' + DAYS[g.to] : ''} ${g.k}`).join(' · ');
 }
 
-const satOf = sh => (sh.saturday === '' || sh.saturday === null || sh.saturday === undefined ? sh.weekend : sh.saturday);
+/** Pessoas exigidas num turno num dia: só o plantão tem um número fixo (1 no dia de plantão).
+ *  Os turnos de dia não têm quotas — a geração distribui a equipa para nivelar o balcão. */
 function needFor(sh, d, wk) {
-  if (sh.onlyDuty && d !== dutyDay(wk)) return 0;
-  if (!shiftFits(sh, d)) return 0;
-  /* «weekend» é o domingo; configurações antigas sem valor de sábado usam o mesmo. */
-  return Math.max(0, +(d === 5 ? satOf(sh) : d === 6 ? sh.weekend : sh.weekday) || 0);
+  if (sh.onlyDuty || sh.night) return d === dutyDay(wk) ? 1 : 0;
+  return 0;
 }
+/** Pessoas precisas ao sábado (a farmácia só abre de manhã). */
+const saturdayPeople = () => Math.max(0, +cfg().saturdayPeople || 0);
 const sortedShifts = () => cfg().shifts.slice().sort((a, b) => (a.night - b.night) || toMin(a.start) - toMin(b.start));
 
 /* ---------- Horas (normais, a dobrar, a pagar) ---------- */
@@ -1343,109 +1346,137 @@ function generate(wk) {
   });
   /* Para o plantão, o dia seguinte noutra semana não conta: essa semana é gerada (ou regenerada) depois. */
   const lookupSemana = (w, id, dd) => (dd > 6 ? null : lookup(w, id, dd));
-  const hardOk = (id, d, sid, extraSlot = 0, look = lookup) => {
+  const hardOk = (id, d, sid, look = lookup) => {
     const e = state.employees[id], sh = shiftOn(shiftById(sid), d);
     if (!sh) return false;
-    /* Sem limite de turnos: o que manda são as horas da semana (e o dia nunca se repete). */
     return !cellIssues(e, id, wk, d, { s: sid, sh, l: '' }, look, true).some(i => i.lvl === 'bad');
   };
-  /* Noites feitas nas últimas semanas, para rodar o plantão pela equipa. */
-  const nightsBefore = id => { let n = 0; for (let k = 1; k <= 6; k++) for (let d = 0; d < 7; d++) if (getCell(shiftWeek(wk, -k), id, d)?.sh?.night) n++; return n; };
   const put = (id, d, sid) => {
     const sh = shiftOn(shiftById(sid), d);
     cells[id][d] = { s: sid }; count[id]++; hours[id] += hoursOf(sh, '').normal;
     if (state.employees[id].backoffice && !sh.night) cells[id][d].post = 'back';
     if (sh.night) nights[id]++;
   };
+  /* Noites e sábados feitos nas últimas semanas, para rodar pela equipa. */
+  const before = (id, test) => { let n = 0; for (let k = 1; k <= 6; k++) for (let d = 0; d < 7; d++) if (test(getCell(shiftWeek(wk, -k), id, d), d)) n++; return n; };
+  const nightsBefore = id => before(id, c => c?.sh?.night);
+  const saturdaysBefore = id => before(id, (c, d) => d === 5 && worksOn(c) && !c.sh?.night);
+  const target = id => weeklyTarget(state.employees[id]);
+  const dayShifts = sortedShifts().filter(sh => !sh.night && !sh.onlyDuty);
+  const dd = dutyDay(wk);
 
+  /* 1. Turnos fixos */
   for (let d = 0; d < 7; d++) for (const id of ids) {
+    if (cells[id][d]) continue;
     const fx = normId(state.employees[id].fixed?.[d]);
     const sh = shiftById(fx);
-    if (!sh || (sh.onlyDuty && needFor(sh, d, wk) === 0)) continue;
+    if (!sh || (sh.onlyDuty && needFor(sh, d, wk) === 0) || (!sh.onlyDuty && !sh.night && !shiftFits(sh, d))) continue;
     if (hardOk(id, d, fx)) put(id, d, fx);
   }
-  /* Folga extra pela noite de fim de semana da semana anterior: no primeiro dia livre a seguir à folga obrigatória. */
+  /* 2. Folga extra pela noite de fim de semana da semana anterior: no primeiro dia livre a seguir à folga obrigatória. */
   for (const id of ids) {
     let owed = extraOffOwed(id, wk);
     for (let d = 0; d < 7 && owed > 0; d++) {
       if (cells[id][d]) continue;
-      if (lookup(wk, id, d - 1)?.sh?.night) continue; // o dia a seguir à noite já é a folga obrigatória
-      const fx = normId(state.employees[id].fixed?.[d]);
-      if (fx && d < 6) continue; // deixa os turnos fixos; a folga cai no dia livre seguinte
+      if (lookup(wk, id, d - 1)?.sh?.night) continue;
       cells[id][d] = { xoff: true }; hours[id] += dayHours(); owed--;
     }
   }
-  /* O plantão primeiro: é o turno que tem mesmo de ficar coberto, e quem o faz fica de folga no dia seguinte. */
-  {
-    const dd = dutyDay(wk);
-    for (const sh of sortedShifts().filter(x => x.onlyDuty || x.night)) {
-      let have = ids.filter(id => cells[id][dd]?.s === sh.id).length;
-      const need = needFor(sh, dd, wk);
-      while (have < need) {
-        const cands = ids.filter(id => !cells[id][dd] && hardOk(id, dd, sh.id, 0, lookupSemana));
-        if (!cands.length) break;
-        const score = id => {
-          const e = state.employees[id], pref = (e.preferred || []).map(normId);
-          return nightsBefore(id) * 10 + (pref.length ? (pref.includes(sh.id) ? -6 : 12) : 0) + Math.random() * 4;
-        };
-        cands.sort((a, b) => score(a) - score(b));
-        put(cands[0], dd, sh.id); have++;
+  /* 3. O plantão: o único turno com número fixo; quem o faz fica de folga no dia seguinte. */
+  for (const sh of sortedShifts().filter(x => x.onlyDuty || x.night)) {
+    let have = ids.filter(id => cells[id][dd]?.s === sh.id).length;
+    const need = needFor(sh, dd, wk);
+    while (have < need) {
+      const cands = ids.filter(id => !cells[id][dd] && hardOk(id, dd, sh.id, lookupSemana));
+      if (!cands.length) break;
+      const score = id => {
+        const e = state.employees[id], pref = (e.preferred || []).map(normId);
+        return nightsBefore(id) * 10 + (pref.length ? (pref.includes(sh.id) ? -6 : 12) : 0) + Math.random() * 4;
+      };
+      cands.sort((a, b) => score(a) - score(b));
+      put(cands[0], dd, sh.id); have++;
+    }
+  }
+  /* Turno de dia que melhor cobre a abertura de um dia (o que apanha mais tempo aberto; empate → mais cedo). */
+  const bestFor = d => {
+    const [oa, ob] = openSpan(d);
+    return dayShifts.filter(sh => shiftFits(sh, d)).map(sh => { const [a, b] = span(sh); return { sh, cover: Math.min(b, ob) - Math.max(a, oa) }; })
+      .sort((x, y) => y.cover - x.cover || toMin(x.sh.start) - toMin(y.sh.start))[0]?.sh || null;
+  };
+  /* 4. Sábado: só as pessoas previstas, a rodar por quem fez menos sábados. */
+  if (!isClosed(5) && dayShifts.length) {
+    const want = saturdayPeople();
+    let have = ids.filter(id => cells[id][5]?.s && !shiftById(cells[id][5].s)?.night).length;
+    const sh = bestFor(5);
+    while (sh && have < want) {
+      const cands = ids.filter(id => !cells[id][5] && hardOk(id, 5, sh.id));
+      if (!cands.length) break;
+      cands.sort((a, b) => (saturdaysBefore(a) - saturdaysBefore(b)) || (hours[a] - hours[b]) || (Math.random() - 0.5));
+      put(cands[0], 5, sh.id); have++;
+    }
+  }
+  /* 5. Segunda a sexta: cada pessoa trabalha os dias que faltam para as suas horas; quando tem dias a mais,
+        folga nos dias com mais gente, para os dias ficarem equilibrados. Aqui só se decide QUEM trabalha em cada dia. */
+  if (dayShifts.length) {
+    const headcount = d => ids.filter(id => cells[id][d]?.s && !shiftById(cells[id][d].s)?.night).length;
+    const order = ids.slice().sort((a, b) => (target(a) - hours[a]) - (target(b) - hours[b])).reverse(); // quem tem mais horas em falta primeiro
+    for (const id of order) {
+      const falta = target(id) - hours[id];
+      if (falta <= 0.01) continue;
+      const livres = [0, 1, 2, 3, 4].filter(d => !cells[id][d] && !isClosed(d) && dayShifts.some(sh => hardOk(id, d, sh.id)));
+      const precisa = Math.min(livres.length, Math.ceil(falta / dayHours() - 1e-9));
+      /* Escolhe os dias com menos gente (empate: por ordem da semana). */
+      const escolha = livres.slice().sort((a, b) => headcount(a) - headcount(b) || a - b).slice(0, precisa);
+      for (const d of escolha.sort((a, b) => a - b)) {
+        /* Turno provisório ao acaso entre os possíveis; o nivelamento a seguir acerta. */
+        const ok = dayShifts.filter(x => hardOk(id, d, x.id));
+        if (ok.length) put(id, d, ok[Math.floor(Math.random() * ok.length)].id);
       }
     }
   }
+  /* 6. Nivelar: em cada dia, troca o turno de cada pessoa para que o número ao balcão fique o mais parecido
+        possível ao longo da abertura, sem descer do mínimo de cada faixa. */
+  const cellsLookup = (w, i, x) => lookup(w, i, x);
   for (let d = 0; d < 7; d++) {
-    for (const sh of sortedShifts()) {
-      const need = needFor(sh, d, wk);
-      let have = ids.filter(id => cells[id][d]?.s === sh.id).length;
-      while (have < need) {
-        const cands = ids.filter(id => !cells[id][d] && !normId(state.employees[id].fixed?.[d]) && hardOk(id, d, sh.id));
-        if (!cands.length) break;
-        /* Quem está mais longe das horas da semana entra primeiro. */
-        const score = id => {
-          const e = state.employees[id], pref = (e.preferred || []).map(normId);
-          const alvo = Math.max(1, weeklyTarget(e) || 40);
-          return (hours[id] / alvo) * 40 + count[id] * 2 + (pref.length ? (pref.includes(sh.id) ? -6 : 12) : 0)
-            + (sh.night ? nights[id] * 8 : 0) + Math.random() * 4;
-        };
-        cands.sort((a, b) => score(a) - score(b));
-        put(cands[0], d, sh.id); have++;
+    if (isClosed(d) || dayShifts.length < 2) continue;
+    const [oa, ob] = openSpan(d);
+    const workers = ids.filter(id => cells[id][d]?.s && !cells[id][d].lock && !shiftById(cells[id][d].s)?.night && !shiftById(cells[id][d].s)?.onlyDuty && !normId(state.employees[id].fixed?.[d]));
+    const others = ids.filter(id => cells[id][d]?.s && !workers.includes(id) && !shiftById(cells[id][d].s)?.night);
+    if (workers.length < 2 && !others.length) continue;
+    const isBack = id => cells[id][d].post === 'back';
+    const counts = () => {
+      const out = [];
+      for (let t = oa; t < ob; t += 30) {
+        let n = 0;
+        for (const id of [...workers, ...others]) { if (isBack(id)) continue; const sh = shiftOn(shiftById(cells[id][d].s), d); const [a, b] = span(sh); if (a <= t && t < b) n++; }
+        out.push({ n, min: minAt(t) });
       }
-    }
-  }
-  /* Toda a gente (menos os extras) tem de chegar às horas da semana: acrescenta turnos a quem está abaixo,
-     mas só em lugares ainda por preencher — o número de pessoas de cada turno é o que se quer, não um mínimo. */
-  const dayShifts = sortedShifts().filter(sh => !sh.onlyDuty && !sh.night);
-  for (let round = 0; round < 14; round++) {
-    let changed = false;
-    const abaixo = ids.filter(id => hours[id] + 0.01 < weeklyTarget(state.employees[id])).sort((a, b) => hours[a] - hours[b]);
-    for (const id of abaixo) {
-      const e = state.employees[id], pref = (e.preferred || []).map(normId);
-      const falta = weeklyTarget(e) - hours[id];
-      let best = null;
-      for (let d = 0; d < 7; d++) {
-        if (cells[id][d]) continue;
-        const gente = ids.filter(o => cells[o][d]?.s).length;
-        for (const base of dayShifts) {
-          if (!shiftFits(base, d) || !hardOk(id, d, base.id)) continue;
-          const h = hoursOf(shiftOn(base, d), '').normal;
-          if (!h) continue;
-          const have = ids.filter(o => cells[o][d]?.s === base.id).length, need = needFor(base, d, wk);
-          if (have >= need) continue;
-          /* Prefere: dias inteiros, dias com menos gente, turnos ainda em falta e turnos preferidos. */
-          /* Enquanto falta um dia inteiro prefere dias inteiros; perto do fim prefere o que não passe das horas. */
-          const fit = falta >= h ? (dayHours() - Math.min(h, dayHours())) * 2 : (h - falta) * 3;
-          const score = fit + gente * 3 - (need - have)
-            + (pref.length ? (pref.includes(base.id) ? -4 : 4) : 0) + Math.random();
-          if (!best || score < best.score) best = { d, sid: base.id, score };
+      return out;
+    };
+    const cost = () => { const c = counts(), avg = c.reduce((x, y) => x + y.n, 0) / c.length; return c.reduce((acc, { n, min }) => acc + (n - avg) ** 2 + 10 * Math.max(0, min - n) ** 2, 0); };
+    let cur = cost();
+    for (let round = 0; round < 12; round++) {
+      let improved = false;
+      for (const id of workers) {
+        let best = { sid: cells[id][d].s, cost: cur };
+        for (const sh of dayShifts) {
+          if (sh.id === cells[id][d].s || !shiftFits(sh, d)) continue;
+          const prev = cells[id][d].s; cells[id][d].s = sh.id;
+          const ok = hardOk(id, d, sh.id, cellsLookup);
+          const k = ok ? cost() : Infinity; cells[id][d].s = prev;
+          if (k < best.cost - 1e-9) best = { sid: sh.id, cost: k };
+        }
+        if (best.sid !== cells[id][d].s) {
+          const prevSh = shiftOn(shiftById(cells[id][d].s), d), newSh = shiftOn(shiftById(best.sid), d);
+          hours[id] += hoursOf(newSh, '').normal - hoursOf(prevSh, '').normal;
+          cells[id][d].s = best.sid; cur = best.cost; improved = true;
         }
       }
-      if (best) { put(id, best.d, best.sid); changed = true; }
+      if (!improved) break;
     }
-    if (!changed) break;
   }
+  /* 7. Backoffice e almoços */
   for (let d = 0; d < 7; d++) {
-    /* Backoffice: quem é de backoffice por defeito já lá está; completa até ao alvo, só de segunda a sexta,
-       nunca com quem faz a noite e, entre os outros, com quem entra mais tarde. */
     const jaBack = ids.filter(id => cells[id][d]?.post === 'back').length;
     const backAlvo = d < 5 ? Math.max(0, (+cfg().backofficePerDay || 0) - jaBack) : 0;
     if (backAlvo) {
@@ -1456,7 +1487,6 @@ function generate(wk) {
       doDia.slice(0, Math.min(backAlvo, Math.max(0, doDia.length - Math.max(0, +cfg().minPresent || 0))))
         .forEach(id => { cells[id][d].post = 'back'; });
     }
-    /* Almoços desencontrados, por ordem de entrada. */
     const taken = [];
     ids.filter(id => cells[id][d]?.lock && cells[id][d].l).forEach(id => taken.push(toMin(cells[id][d].l)));
     ids.filter(id => shiftOn(shiftById(cells[id][d]?.s), d)?.lunch && !cells[id][d].lock)
@@ -1674,16 +1704,21 @@ function renderSchedule() {
       `<button class="linkbtn saldo" data-action="bank-report" data-id="${esc(id)}" title="Saldo do banco com o que já foi trabalhado até hoje (as horas desta semana só entram quando forem feitas)">saldo ${fmtBank(saldoFim)}</button></td></tr>`;
   }
 
-  let foot = '', need = 0, filled = 0;
+  let foot = '', filled = 0;
   for (const sh of sortedShifts()) {
     let tds = '';
     for (let d = 0; d < 7; d++) {
       const req = needFor(sh, d, wk), have = ids.filter(id => getCell(wk, id, d)?.sh?.id === sh.id).length;
-      need += req; filled += Math.min(have, req);
+      filled += have;
       if (have < req) alerts.push({ lvl: 'bad', who: 'Cobertura', when: `${DAYS[d]} ${days[d].getDate()}`, msg: `${sh.name} (${sh.start}): ${have} de ${req} ${req === 1 ? 'pessoa necessária' : 'pessoas necessárias'}` });
-      tds += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}">${req || have ? `<span class="cov ${have < req ? 'short' : have > req ? 'extra' : 'ok'}" title="${have} atribuídos, ${req} necessários">${have}/${req}</span>` : '<span class="cov none">—</span>'}</td>`;
+      tds += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}">${req || have ? `<span class="cov ${have < req ? 'short' : 'ok'}" title="${have} ${have === 1 ? 'pessoa' : 'pessoas'}${req ? `, ${req} necessária` : ''}">${req ? `${have}/${req}` : have}</span>` : '<span class="cov none">—</span>'}</td>`;
     }
     foot += `<tr><th scope="row"><span class="dot ${toneOf(sh)}"></span>${esc(sh.name)}<small>${sh.start}–${sh.end}${sh.onlyDuty ? ' · só no plantão' : ''}</small></th>${tds}<td class="tot"></td></tr>`;
+  }
+  /* Sábado: só abre de manhã e precisa de um número fixo de pessoas. */
+  if (hasSched && !closed[5]) {
+    const sat = ids.filter(id => { const c = getCell(wk, id, 5); return worksOn(c) && !c.sh?.night; }).length, want = saturdayPeople();
+    if (sat !== want) alerts.push({ lvl: sat < want ? 'bad' : 'warn', who: 'Sábado', when: `${DAYS[5]} ${days[5].getDate()}`, msg: `${sat} ${sat === 1 ? 'pessoa' : 'pessoas'} escaladas, ${want} ${want === 1 ? 'prevista' : 'previstas'}` });
   }
 
   const pres = days.map((_, d) => presence(wk, d, ids));
@@ -1760,7 +1795,7 @@ function renderSchedule() {
   const ro = state.readOnly ? 'disabled' : '';
   const shiftsTxt = sortedShifts().map(s => {
     const h = hoursOf(s, '');
-    return `<dt><span class="dot ${toneOf(s)}"></span> ${esc(s.name)}</dt><dd>${s.start}–${s.end} · ${h.dbl ? `${fmtH(h.normal)} h trabalhadas + ${fmtH(h.dbl)} h nocturnas` : `${fmtH(h.work)} h`}${s.onlyDuty ? ' · só no dia de plantão' : ` · Seg–Sex ${s.weekday || 0}, Sáb ${+satOf(s) || 0}, Dom ${s.weekend || 0}`}</dd>`;
+    return `<dt><span class="dot ${toneOf(s)}"></span> ${esc(s.name)}</dt><dd>${s.start}–${s.end} · ${h.dbl ? `${fmtH(h.normal)} h trabalhadas + ${fmtH(h.dbl)} h nocturnas` : `${fmtH(h.work)} h`}${s.onlyDuty ? ' · só no dia de plantão' : ''}</dd>`;
   }).join('');
 
   return `
@@ -1774,7 +1809,6 @@ function renderSchedule() {
     <div class="actions">
       <button class="btn primary" data-action="generate" ${ro || !ids.length ? 'disabled' : ''}>Gerar escala</button>
       <button class="btn" data-action="relunch" ${ro || !hasSched ? 'disabled' : ''}>Distribuir almoços</button>
-      <button class="btn" data-action="level" ${ro || !hasSched ? 'disabled' : ''} title="Experimental: troca os turnos de quem já trabalha em cada dia para que haja um número mais parecido de pessoas ao balcão ao longo do dia">Nivelar</button>
       <button class="btn" data-action="copy-prev" ${ro || !ids.length ? 'disabled' : ''}>Copiar semana anterior</button>
       <button class="btn" data-action="clear" ${ro || !hasSched ? 'disabled' : ''}>Limpar semana</button>
       <button class="btn" data-action="print">Imprimir</button>
@@ -1783,7 +1817,7 @@ function renderSchedule() {
   ${!ids.length ? `<div class="empty"><p>Ainda não há funcionários.</p><button class="btn primary" data-action="new" ${ro}>Adicionar funcionário</button></div>` : `
   ${!hasSched ? `<div class="empty-week"><p>Esta semana ainda não tem escala. Gera uma proposta com base nas preferências, turnos fixos, almoços desencontrados e o plantão de ${DAYS_LONG[duty].toLowerCase()}.</p><button class="btn primary" data-action="generate" ${ro}>Gerar escala</button></div>` : ''}
   <div class="summary">
-    <span><b>${filled}/${need}</b>turnos cobertos</span>
+    <span><b>${filled}</b>turnos atribuídos</span>
     <span><b>${fmtH(totalWork)}</b>horas trabalhadas</span>
     <span><b>${fmtH(totalApart)}</b>horas nocturnas</span>
     <span><b style="color:${bad ? 'var(--bad)' : 'var(--ok)'}">${bad}</b>conflitos</span>
@@ -1801,7 +1835,7 @@ function renderSchedule() {
   <div class="below">
     <section>
       <h2>Alertas da semana</h2>
-      ${alerts.length ? `<ul class="alerts">${alerts.map(a => `<li><span class="sev ${a.lvl}">${a.lvl === 'bad' ? 'Conflito' : 'Aviso'}</span><span><b>${esc(a.who)}</b> <span class="when">${esc(a.when)}</span><br>${esc(a.msg)}</span></li>`).join('')}</ul>` : '<div class="allgood">Sem conflitos: turnos cobertos, almoços dentro do intervalo e sempre alguém ao balcão.</div>'}
+      ${alerts.length ? `<ul class="alerts">${alerts.map(a => `<li><span class="sev ${a.lvl}">${a.lvl === 'bad' ? 'Conflito' : 'Aviso'}</span><span><b>${esc(a.who)}</b> <span class="when">${esc(a.when)}</span><br>${esc(a.msg)}</span></li>`).join('')}</ul>` : '<div class="allgood">Sem conflitos: plantão coberto, almoços dentro do intervalo e sempre alguém ao balcão.</div>'}
     </section>
     <aside class="rules">
       <h2>Regras da escala</h2>
@@ -2073,7 +2107,7 @@ function refreshCfgBits() {
 function openingCoverage(c, o, d) {
   if (!validTime(o.open) || !validTime(o.close)) return '—';
   const a = toMin(o.open); let b = toMin(o.close); if (b <= a) b += 1440;
-  const day = c.shifts.filter(s => !s.night && !s.onlyDuty && validTime(s.start) && validTime(s.end) && (+(d >= 5 ? s.weekend : s.weekday) || 0) > 0);
+  const day = c.shifts.filter(s => !s.night && !s.onlyDuty && validTime(s.start) && validTime(s.end));
   if (!day.length) return 'sem turnos de dia';
   const from = Math.min(...day.map(s => span(s)[0])), to = Math.max(...day.map(s => span(s)[1]));
   const gaps = [];
@@ -2101,9 +2135,6 @@ function renderSettings() {
       <td class="c"><input type="checkbox" id="cfg-${i}-lunch" data-cfg="shift" data-i="${i}" data-k="lunch" ${s.lunch ? 'checked' : ''} aria-label="Tem almoço" ${ro}></td>
       <td class="c"><input type="checkbox" id="cfg-${i}-night" data-cfg="shift" data-i="${i}" data-k="night" ${s.night ? 'checked' : ''} aria-label="Turno noturno" ${ro}></td>
       <td class="c"><input type="checkbox" id="cfg-${i}-onlyDuty" data-cfg="shift" data-i="${i}" data-k="onlyDuty" ${s.onlyDuty ? 'checked' : ''} aria-label="Só no dia de plantão" ${ro}></td>
-      <td><input type="number" id="cfg-${i}-weekday" data-cfg="shift" data-i="${i}" data-k="weekday" value="${+s.weekday || 0}" min="0" max="20" aria-label="Pessoas de segunda a sexta" ${ro}></td>
-      <td><input type="number" id="cfg-${i}-saturday" data-cfg="shift" data-i="${i}" data-k="saturday" value="${+satOf(s) || 0}" min="0" max="20" aria-label="Pessoas ao sábado" ${ro}></td>
-      <td><input type="number" id="cfg-${i}-weekend" data-cfg="shift" data-i="${i}" data-k="weekend" value="${+s.weekend || 0}" min="0" max="20" aria-label="Pessoas ao domingo" ${ro}></td>
       <td class="hrs" id="cfg-hrs-${i}">${validTime(s.start) && validTime(s.end) ? shiftHoursLabel(s, c) : '—'}</td>
       <td><button class="btn danger icon" data-action="cfg-remove" data-i="${i}" aria-label="Remover turno ${esc(s.name)}" ${ro}>✕</button></td>
     </tr>`).join('');
@@ -2135,9 +2166,9 @@ function renderSettings() {
   </div>
   <section class="panel">
     <h3>Turnos</h3>
-    <p>Horário de cada turno e quantas pessoas são precisas. «Só no plantão» reserva o turno para o único dia de plantão da semana. As horas mostram o tempo que conta como trabalhado e o que são horas nocturnas, pagas à parte.</p>
+    <p>Horário de cada turno. Não há quotas por turno: de segunda a sexta a geração distribui a equipa pelos turnos para manter um número parecido de pessoas ao balcão ao longo do dia; ao sábado escala só as pessoas indicadas abaixo; ao domingo só trabalha o plantão, quando calha nesse dia. «Só no plantão» reserva o turno para o dia de plantão. As horas mostram o tempo que conta como trabalhado e o que são horas nocturnas, pagas à parte.</p>
     <div class="cfg-wrap"><table class="cfg">
-      <thead><tr><th>Nome</th><th>Abrev.</th><th>Início</th><th>Fim</th><th class="c">Almoço</th><th class="c">Noturno</th><th class="c">Só no plantão</th><th>Seg–Sex</th><th>Sáb</th><th>Dom</th><th>Horas</th><th></th></tr></thead>
+      <thead><tr><th>Nome</th><th>Abrev.</th><th>Início</th><th>Fim</th><th class="c">Almoço</th><th class="c">Noturno</th><th class="c">Só no plantão</th><th>Horas</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
     <div style="margin-top:12px"><button class="btn" data-action="cfg-add" ${ro}>Adicionar turno</button></div>
@@ -2175,6 +2206,7 @@ function renderSettings() {
         <div><button class="btn" data-action="band-add" ${ro}>Adicionar período</button></div>
         <small>Ex.: das 12:00 às 16:00 chegam 2 pessoas ao balcão. Fora destes períodos vale o mínimo geral.</small>
       </div>
+      <div class="field-inline"><label for="cfg-saturdayPeople">Pessoas ao sábado</label><input type="number" id="cfg-saturdayPeople" data-cfg="rule" data-k="saturdayPeople" value="${+c.saturdayPeople || 0}" min="0" max="20" ${ro}><small>Quantas pessoas a geração escala ao sábado (só abre de manhã)</small></div>
       <div class="field-inline"><label for="cfg-backofficePerDay">Backoffice por dia</label><input type="number" id="cfg-backofficePerDay" data-cfg="rule" data-k="backofficePerDay" value="${+c.backofficePerDay || 0}" min="0" max="10" ${ro}><small>Pessoas fora do balcão, que podem reforçar nas horas de ponta</small></div>
       <div class="field-inline"><label for="cfg-weeklyHours">Horas por semana</label><input type="number" id="cfg-weeklyHours" data-cfg="rule" data-k="weeklyHours" value="${+c.weeklyHours || 0}" min="0" max="80" step="0.5" ${ro}><small>Mínimo de cada pessoa, salvo valor próprio na ficha</small></div>
       <div class="field-inline"><label for="cfg-dayHours">Dia completo (h)</label><input type="number" id="cfg-dayHours" data-cfg="rule" data-k="dayHours" value="${+c.dayHours || 8}" min="1" max="24" step="0.5" ${ro}><small>Descontar isto do banco num dia equivale a uma folga</small></div>
@@ -2536,76 +2568,6 @@ function setBankOff(id, d, hours) {
   }
   writeCell(id, d, { bank: hours });
 }
-/* ---------- Nivelar (experimental) ----------
-   Mantém quem trabalha em cada dia e troca só o turno de cada um, para que o número de pessoas ao
-   balcão fique o mais parecido possível ao longo do horário de abertura (sem descer do mínimo). */
-function levelWeek(wk) {
-  const ids = sortedIds(), dayShifts = sortedShifts().filter(sh => !sh.night && !sh.onlyDuty);
-  const sched = clone(state.schedules[wk] || { cells: {} }); sched.cells = sched.cells || {};
-  const spread = { before: 0, after: 0 }; let moved = 0;
-  for (let d = 0; d < 7; d++) {
-    if (isClosed(d) || !dayShifts.length) continue;
-    const [oa, ob] = openSpan(d);
-    const workers = ids.filter(id => { const c = getCell(wk, id, d); return c?.sh && !c.sh.night && !c.sh.onlyDuty; });
-    if (workers.length < 2) continue;
-    const assign = {}; workers.forEach(id => { assign[id] = getCell(wk, id, d).s; });
-    const back = {}; workers.forEach(id => { back[id] = getCell(wk, id, d).post === 'back'; });
-    const fixed = {}; workers.forEach(id => { fixed[id] = !!normId(state.employees[id].fixed?.[d]) || !!getCell(wk, id, d).lock; });
-    const counts = () => {
-      const out = [];
-      for (let t = oa; t < ob; t += 30) {
-        let n = 0;
-        for (const id of workers) { if (back[id]) continue; const sh = shiftOn(shiftById(assign[id]), d); if (!sh) continue; const [a, b] = span(sh); if (a <= t && t < b) n++; }
-        out.push({ t, n, min: minAt(t) });
-      }
-      return out;
-    };
-    const cost = () => {
-      const c = counts(), avg = c.reduce((x, y) => x + y.n, 0) / c.length;
-      return c.reduce((acc, { n, min }) => acc + (n - avg) ** 2 + 10 * Math.max(0, min - n) ** 2, 0);
-    };
-    const okFor = (id, sid) => {
-      const sh = shiftOn(shiftById(sid), d); if (!sh || !shiftFits(shiftById(sid), d)) return false;
-      const e = state.employees[id];
-      const look = (w, i, dd) => (w === wk && i === id && dd === d) ? { s: sid, sh, l: '' } : getCell(w, i, dd);
-      return !cellIssues(e, id, wk, d, { s: sid, sh, l: '' }, look, true).some(i => i.lvl === 'bad');
-    };
-    const range = c => Math.max(...c.map(x => x.n)) - Math.min(...c.map(x => x.n));
-    spread.before += range(counts());
-    let cur = cost();
-    for (let round = 0; round < 12; round++) {
-      let improved = false;
-      for (const id of workers) {
-        if (fixed[id]) continue;
-        let best = { sid: assign[id], cost: cur };
-        for (const sh of dayShifts) {
-          if (sh.id === assign[id] || !okFor(id, sh.id)) continue;
-          const prev = assign[id]; assign[id] = sh.id;
-          const k = cost(); assign[id] = prev;
-          if (k < best.cost - 1e-9) best = { sid: sh.id, cost: k };
-        }
-        if (best.sid !== assign[id]) { assign[id] = best.sid; cur = best.cost; improved = true; }
-      }
-      if (!improved) break;
-    }
-    spread.after += range(counts());
-    /* Escreve as trocas e volta a marcar os almoços do dia (desencontrados), mantendo posto, pagamento e horas a menos. */
-    const changed = workers.filter(id => assign[id] !== getCell(wk, id, d).s);
-    moved += changed.length;
-    if (!changed.length) continue;
-    const taken = [];
-    workers.sort((a, b) => toMin(shiftById(assign[a]).start) - toMin(shiftById(assign[b]).start)).forEach(id => {
-      const c = getCell(wk, id, d), raw = cellRaw(c); raw.s = assign[id]; delete raw.l;
-      const sh = shiftOn(shiftById(assign[id]), d);
-      if (c.lock) { if (c.l) { raw.l = c.l; taken.push(toMin(c.l)); } }
-      else if (sh.lunch) { const l = changed.includes(id) || !c.l ? pickLunch(sh, taken) : c.l; if (l) { raw.l = l; taken.push(toMin(l)); } }
-      sched.cells[id] = sched.cells[id] || {}; sched.cells[id][d] = raw;
-    });
-  }
-  if (moved) { sched.updatedAt = new Date().toISOString(); store.saveWeek(wk, sched); }
-  render();
-  return { moved, ...spread };
-}
 function redistributeLunches() {
   const wk = state.week, ids = sortedIds();
   const sched = clone(state.schedules[wk] || { cells: {} });
@@ -2899,11 +2861,6 @@ document.addEventListener('click', async ev => {
       render(); toast('Escala gerada. Revê os alertas e ajusta o que for preciso.'); break;
     }
     case 'relunch': redistributeLunches(); toast('Almoços redistribuídos para não coincidirem.'); break;
-    case 'level': {
-      const r = levelWeek(state.week);
-      toast(r.moved ? `Nivelado: ${r.moved} ${r.moved === 1 ? 'turno trocado' : 'turnos trocados'} (diferença máx–mín ao balcão na semana: ${r.before} → ${r.after}).` : 'Já está o mais nivelado que os turnos permitem.');
-      break;
-    }
     case 'copy-prev': {
       const prev = state.schedules[shiftWeek(state.week, -1)]?.cells;
       if (!prev || !Object.values(prev).some(c => Object.keys(c).length)) { toast('A semana anterior não tem turnos para copiar.'); break; }
@@ -2980,6 +2937,7 @@ document.addEventListener('click', async ev => {
       c.weeklyHours = Math.max(0, Math.min(80, +c.weeklyHours || 0));
       c.dayHours = Math.max(1, Math.min(24, +c.dayHours || 8));
       c.backofficePerDay = Math.max(0, Math.min(10, +c.backofficePerDay || 0));
+      c.saturdayPeople = Math.max(0, Math.min(20, +c.saturdayPeople || 0));
       c.dutyAnchorDay = Math.min(6, Math.max(0, +c.dutyAnchorDay || 0));
       c.dutyStep = Number.isFinite(+c.dutyStep) ? +c.dutyStep : 1;
       c.dutyAnchorWeek = iso(mondayOf(parseISO(/^\d{4}-\d{2}-\d{2}$/.test(c.dutyAnchorWeek) ? c.dutyAnchorWeek : DEFAULT_CONFIG.dutyAnchorWeek)));
@@ -2994,7 +2952,7 @@ document.addEventListener('click', async ev => {
         s.name = String(s.name).trim(); s.short = String(s.short || '').trim();
         s.start = normalizeTime(s.start); s.end = normalizeTime(s.end);
         s.weekday = Math.max(0, +s.weekday || 0); s.weekend = Math.max(0, +s.weekend || 0);
-        s.saturday = Math.max(0, +satOf(s) || 0);
+        s.saturday = s.saturday === '' || s.saturday == null ? null : Math.max(0, +s.saturday || 0);
       });
       const w = cfgWarnings(c).list;
       if (w.length) { toast(w[0]); break; }
