@@ -219,6 +219,14 @@ exportação e importação em JSON.
   faixas horárias em que o mínimo é diferente (ex.: das 12:00 às 16:00 chegam 2
   pessoas). Fora dessas faixas vale o mínimo geral.
 
+## Balcão
+
+O separador **Balcão** mostra, para a semana escolhida, uma tabela hora a hora com quem está
+ao balcão em cada dia: nomes com a cor de cada pessoa, quem está a almoçar nessa hora
+(riscado, ou 🍴 se o almoço apanha só parte da hora), quem está em backoffice (tracejado,
+não conta para o mínimo), a contagem face ao mínimo dessa hora e, na última linha, quem
+faz a noite de serviço no dia de plantão.
+
 ## Horário da farmácia
 
 No separador **Turnos → Horário da farmácia** defines, para cada dia da semana, a hora de

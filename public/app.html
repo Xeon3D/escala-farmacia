@@ -120,6 +120,21 @@ button:disabled{cursor:not-allowed;opacity:.55}
 .empty-week p{margin:0}
 
 .grid-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+table.counter{border-collapse:separate;border-spacing:0;width:100%;min-width:900px}
+.counter th,.counter td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top;font-size:13px}
+.counter thead th{font-weight:500;font-size:12px;color:var(--ink-2);padding-block:10px;background:var(--surface);text-align:center}
+.counter thead th b{display:block;font:600 16px var(--display);color:var(--ink)}
+.counter th.hour{font-family:var(--mono);font-size:12px;color:var(--ink-2);white-space:nowrap;position:sticky;left:0;background:var(--surface);border-right:1px solid var(--line);width:1%}
+.counter td.shut{background:repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in srgb,var(--ink) 4%,transparent) 6px 7px);color:var(--ink-3);text-align:center}
+.counter td.low{box-shadow:inset 3px 0 var(--bad)}
+.counter td.warnlow{box-shadow:inset 3px 0 var(--warn)}
+.counter .who{display:flex;flex-wrap:wrap;gap:4px}
+.counter .who span{display:inline-flex;align-items:center;gap:5px;padding:1px 7px;border-radius:999px;background:var(--surface-2);font-size:12px;white-space:nowrap}
+.counter .who span i{width:8px;height:8px;border-radius:50%;flex:none}
+.counter .who span.lunch{opacity:.55;text-decoration:line-through}
+.counter .who span.back{border:1px dashed var(--line);background:transparent;color:var(--ink-2)}
+.counter .cnt{font:600 11px var(--mono);color:var(--ink-3);margin-top:4px}
+.counter .cnt.bad{color:var(--bad)}
 table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:980px}
 .grid th,.grid td{border-bottom:1px solid var(--line);padding:6px;text-align:center;vertical-align:middle}
 .grid thead th{font-weight:500;font-size:12px;color:var(--ink-2);padding-block:10px;background:var(--surface)}
@@ -409,6 +424,7 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
       <span class="status" id="status"><i></i><span>A ligar…</span></span>
       <nav class="tabs" role="tablist" aria-label="Secções" id="tabs">
         <button class="tab" role="tab" id="tab-horario" data-action="tab" data-tab="horario" aria-selected="true">Horário</button>
+        <button class="tab" role="tab" id="tab-balcao" data-action="tab" data-tab="balcao" aria-selected="false">Balcão</button>
         <button class="tab" role="tab" id="tab-horas" data-action="tab" data-tab="horas" aria-selected="false">Horas</button>
         <button class="tab" role="tab" id="tab-equipa" data-action="tab" data-tab="equipa" aria-selected="false">Equipa</button>
         <button class="tab" role="tab" id="tab-turnos" data-action="tab" data-tab="turnos" aria-selected="false">Turnos</button>
@@ -699,7 +715,7 @@ const state = {
   employees: {}, schedules: {}, config: null, cfgDraft: null, cfgDirty: false,
   week: iso(mondayOf(now)),
   month: `${now.getFullYear()}-${pad(now.getMonth() + 1)}`,
-  tab: ['horario', 'horas', 'equipa', 'turnos', 'definicoes'].includes(savedTab) ? savedTab : 'horario',
+  tab: ['horario', 'balcao', 'horas', 'equipa', 'turnos', 'definicoes'].includes(savedTab) ? savedTab : 'horario',
   search: '', mode: 'loading', loaded: { e: false, s: false, c: false }, readOnly: false,
   user: null, setup: false, users: null, gateError: '', app: null, update: null, phrase: '',
 };
@@ -1464,6 +1480,7 @@ function render() {
   if (state.mode === 'loading' || !state.loaded.e || !state.loaded.s || !state.loaded.c) { $('#view').innerHTML = '<div class="loading">A carregar a escala…</div>'; return; }
   const focusId = document.activeElement?.id;
   $('#view').innerHTML = state.tab === 'horario' ? renderSchedule()
+    : state.tab === 'balcao' ? renderCounter()
     : state.tab === 'horas' ? renderHours()
     : state.tab === 'equipa' ? renderTeam()
     : state.tab === 'utilizadores' ? renderUsers()
@@ -1751,6 +1768,68 @@ function renderSchedule() {
       <p>Clica numa célula para escolher o turno e a hora de almoço. Para mudar horários, plantão e cobertura, <button class="linkbtn" data-action="tab" data-tab="turnos">edita os turnos</button>.</p>
     </aside>
   </div>`}`;
+}
+
+/* ---------- Balcão: quem está ao balcão hora a hora ---------- */
+function renderCounter() {
+  const C = cfg(), wk = state.week, mon = parseISO(wk), ids = sortedIds();
+  const days = [...Array(7)].map((_, i) => addDays(mon, i));
+  const duty = dutyDay(wk), today = iso(new Date()), lm = +C.lunchMin || 60;
+  const open = [...Array(7)].map((_, d) => (isClosed(d) ? null : openSpan(d)));
+  const from = Math.min(...open.filter(Boolean).map(o => o[0]), 24 * 60), to = Math.max(...open.filter(Boolean).map(o => o[1]), 0);
+  /* Quem está presente num dia entre t e t+60: turnos de dia (já cortados ao horário) e extras com hora de entrada. */
+  const people = (d, t) => {
+    const out = [];
+    for (const id of ids) {
+      const c = getCell(wk, id, d);
+      if (!c || c.sh?.night) continue;
+      const sp = c.sh ? span(c.sh) : extraSpan(c);
+      if (!sp || sp[0] >= t + 60 || sp[1] <= t) continue;
+      const l = c.sh?.lunch && c.l ? toMin(c.l) : null;
+      const lunchAll = l !== null && l <= t && l + lm >= t + 60;          // almoço ocupa a hora toda
+      const lunchPart = l !== null && !lunchAll && l < t + 60 && l + lm > t; // almoço apanha parte da hora
+      out.push({ id, e: state.employees[id], back: c.post === 'back', lunchAll, lunchPart, l });
+    }
+    return out;
+  };
+  const head = days.map((dt, d) => `<th class="${d === duty ? 'duty' : ''} ${iso(dt) === today ? 'today' : ''}">${DAYS[d]}<b>${dt.getDate()}</b>${d === duty ? '<span class="duty-tag">plantão</span>' : ''}${open[d] ? `<small class="muted" style="display:block;font-size:11px">${fmtMin(open[d][0])}–${fmtMin(open[d][1])}</small>` : '<span class="closed-tag">fechada</span>'}</th>`).join('');
+  let rows = '';
+  for (let t = from; t < to; t += 60) {
+    let tds = '';
+    for (let d = 0; d < 7; d++) {
+      if (!open[d] || t + 60 <= open[d][0] || t >= open[d][1]) { tds += '<td class="shut">—</td>'; continue; }
+      const ps = people(d, t);
+      const atCounter = ps.filter(p => !p.back && !p.lunchAll).length;
+      const min = Math.min(minAt(t), minAt(t + 30));
+      const chips = ps.sort((a, b) => (a.back - b.back) || a.e.name.localeCompare(b.e.name, 'pt')).map(p =>
+        `<span class="${p.back ? 'back' : ''} ${p.lunchAll ? 'lunch' : ''}" title="${esc(p.e.name)}${p.back ? ' · backoffice' : ''}${p.l !== null ? ` · almoço ${fmtMin(p.l)}–${fmtMin(p.l + lm)}` : ''}"><i style="background:${esc(p.e.color || COLORS[0])}"></i>${esc(p.e.name.split(' ')[0])}${p.lunchPart ? ' <small>🍴</small>' : ''}${p.back ? ' <small>back</small>' : ''}</span>`).join('');
+      const low = atCounter < min;
+      tds += `<td class="${low ? (ps.some(p => p.back) ? 'warnlow' : 'low') : ''} ${d === duty ? 'duty' : ''}"><div class="who">${chips || '<span style="color:var(--bad)">ninguém</span>'}</div><div class="cnt ${low ? 'bad' : ''}">${atCounter} ao balcão · mín. ${min}</div></td>`;
+    }
+    rows += `<tr><th class="hour">${fmtMin(t)}–${fmtMin(t + 60)}</th>${tds}</tr>`;
+  }
+  /* Noite de serviço no dia de plantão */
+  const nightTds = days.map((_, d) => {
+    const who = ids.filter(id => getCell(wk, id, d)?.sh?.night).map(id => state.employees[id]);
+    return `<td class="${d === duty ? 'duty' : ''} ${d !== duty ? 'shut' : ''}">${d === duty ? (who.length ? `<div class="who">${who.map(e => `<span><i style="background:${esc(e.color || COLORS[0])}"></i>${esc(e.name.split(' ')[0])}</span>`).join('')}</div>` : '<span style="color:var(--bad)">ninguém</span>') : '—'}</td>`;
+  }).join('');
+  const night = C.shifts.find(sh => sh.night);
+  rows += `<tr><th class="hour">Noite${night ? `<br><small>${night.start}–${night.end}</small>` : ''}</th>${nightTds}</tr>`;
+  return `
+  <div class="toolbar">
+    <div class="weeknav">
+      <button class="btn icon" data-action="week" data-n="-1" aria-label="Semana anterior"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3 5 8l5 5"/></svg></button>
+      <div class="weeklabel"><span>Semana ${isoWeek(mon)} · quem está ao balcão</span><b>${weekRange(wk)}</b></div>
+      <button class="btn icon" data-action="week" data-n="1" aria-label="Semana seguinte"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 3 5 5-5 5"/></svg></button>
+      <button class="btn ghost" data-action="today">Esta semana</button>
+    </div>
+    <div class="actions"><button class="btn" data-action="print">Imprimir</button></div>
+  </div>
+  <div class="grid-wrap"><table class="counter">
+    <thead><tr><th class="hour">Hora</th>${head}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>
+  <p class="note" style="margin-top:12px">Cada linha é uma hora do horário de abertura. Quem está riscado está a almoçar durante essa hora inteira; 🍴 marca um almoço que apanha parte da hora. Quem está em <em>backoffice</em> aparece a tracejado e não conta para o mínimo ao balcão. A barra à esquerda da célula assinala horas abaixo do mínimo (a laranja quando há alguém em backoffice que pode reforçar).</p>`;
 }
 
 /* ---------- Horas mensais ---------- */
