@@ -220,11 +220,12 @@ exportação e importação em JSON.
 No separador **Turnos → Horário da farmácia** defines, para cada dia da semana, a hora de
 abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). Efeitos:
 
-- Nos dias fechados a escala não pede turnos de dia nem presença ao balcão, a geração
-  automática não atribui ninguém e um turno marcado à mão aparece com aviso.
+- Nos dias fechados só se atribui o turno de plantão (a noite de serviço); um turno de
+  dia marcado à mão aparece como conflito.
+- Os turnos são cortados ao horário de abertura: um turno das 09:00 às 18:00 num sábado
+  que fecha às 13:00 faz 09:00–13:00 (4 h, sem almoço). Um turno que nem apanhe o
+  horário de abertura não é pedido nesse dia.
 - O gráfico «Ao balcão» e o mínimo de pessoas cobrem só o horário de abertura desse dia.
-- No dia de plantão a farmácia conta sempre como aberta, mesmo que seja o dia de
-  encerramento semanal.
 - A coluna «Cobertura dos turnos» avisa se os turnos definidos deixam parte do horário
   de abertura sem ninguém.
 
@@ -234,9 +235,14 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
   serviço das 19:00 às 07:00. Tudo editável no separador *Turnos*.
 - **Almoço**: 60 min, a começar entre as 12:00 e as 15:00 (termina até às 16:00),
   desencontrado entre colegas.
-- **Horas a dobrar**: entre as 22:00 e as 09:00 cada hora conta a dobrar. Na noite de
-  serviço, das 19:00 às 22:00 conta normal e das 22:00 às 07:00 conta a dobrar:
-  12 h de presença = 21 h a pagar.
+- **Horas nocturnas**: as horas entre as 22:00 e as 09:00 **não entram nas horas
+  trabalhadas** — ficam à parte, na coluna «horas nocturnas», e pagam-se a dobrar. Na
+  noite de serviço das 19:00 às 07:00 só as 3 h das 19:00 às 22:00 contam como
+  trabalhadas; as 9 h restantes são horas nocturnas.
+- **Horas da semana**: ao gerar a escala, toda a gente (menos os extras) é levada às
+  suas horas semanais (40 h por omissão), mesmo para lá da cobertura mínima — a
+  geração pode passar o máximo de turnos por um quando é a única forma de lá chegar, e
+  avisa quando não consegue (dias indisponíveis, fins de semana curtos, etc.).
 - **Plantão**: um dia por semana, a recuar um dia por semana. A semana de referência e
   o dia são configuráveis.
 - **Descanso**: mínimo de 11 h entre o fim de um turno e o início do seguinte.
