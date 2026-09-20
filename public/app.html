@@ -1035,6 +1035,9 @@ function weekStats(id, wk) {
   out.target = Math.max(0, weeklyTarget(e) - (out.vac + out.sick + out.extraOffDue) * dayHours());
   out.credited = out.work + out.used;             // conta para o mínimo semanal
   out.missing = Math.max(0, out.target - out.credited);
+  /* O que passar das horas da semana são horas extra: vão para o banco, para gastar mais tarde. */
+  out.over = out.target > 0 ? Math.max(0, Math.round((out.work - out.target) * 100) / 100) : 0;
+  out.banked += out.over;
   return out;
 }
 
@@ -1496,8 +1499,7 @@ function renderSchedule() {
       } else if (c) { tone = 'tone-x'; inner = '<b>?</b><span>removido</span>'; }
       tds += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}"><button class="cell ${tone} ${worst && worst !== 'info' ? 'has-' + worst : ''}" data-action="cell" data-id="${esc(id)}" data-d="${d}" title="${esc(label)}" aria-label="${esc(label)}" aria-haspopup="menu" ${state.readOnly ? 'disabled' : ''}>${inner}${e.fixed?.[d] ? '<i class="pin">fixo</i>' : ''}${c?.pay === 'bank' ? '<i class="pin bankpin">banco</i>' : ''}${isBackoffice(c) ? '<i class="pin backpin">back</i>' : ''}${c?.less ? `<i class="pin lesspin">−${fmtH(c.less)}h</i>` : ''}${worst === 'bad' || worst === 'warn' ? '<i class="flag"></i>' : ''}</button></td>`;
     }
-    const over = st.target > 0 && st.credited > st.target + 0.01;
-    if (over) alerts.push({ lvl: 'info', who: e.name, when: 'Semana', msg: `${fmtH(st.credited)} h, acima das ${fmtH(st.target)} h da semana` });
+    const over = false;
     if (st.missing > 0 && st.target > 0 && st.turnos + st.used > 0) {
       const saldoAntes = bankBefore(id, wk);
       alerts.push({
@@ -1511,7 +1513,7 @@ function renderSchedule() {
       `<b>${st.target ? `${fmtH(st.credited)}/${fmtH(st.target)} h` : `${fmtH(st.credited)} h`}</b>${e.extra ? `<span>${st.turnos} ${st.turnos === 1 ? 'dia' : 'dias'}</span>` : ''}` +
       (st.extraOffDue ? `<span class="bank">${st.extraOffDue === 1 ? 'folga extra' : st.extraOffDue + ' folgas extra'} (noite de fim de semana)</span>` : '') +
       (st.dbl ? `<span class="pay">+${fmtH(st.dbl)} h nocturnas</span>` : '') +
-      (st.banked ? `<span class="bank">banco +${fmtH(st.banked)} h${st.extraOff ? ` (${st.extraOff === 1 ? 'folga extra' : st.extraOff + ' folgas extra'})` : ''}</span>` : '') +
+      (st.banked ? `<span class="bank">banco +${fmtH(st.banked)} h${st.over ? ` (${fmtH(st.over)} h extra)` : ''}</span>` : '') +
       (st.used ? `<span class="bank used">banco −${fmtH(st.used)} h</span>` : '') +
       (st.less ? `<span class="pay" style="color:var(--warn)">−${fmtH(st.less)} h a menos</span>` : '') +
       `<span class="saldo" title="Saldo do banco no fim desta semana">saldo ${fmtBank(saldoFim)}</span></td></tr>`;
@@ -1652,7 +1654,7 @@ function renderSchedule() {
         <dt>Semana</dt><dd>${fmtH(+C.weeklyHours || 0)} h por pessoa, salvo valor próprio na ficha. Horas descontadas do banco contam para este mínimo</dd>
         <dt>Backoffice</dt><dd>Não trabalha ao sábado nem ao domingo. Quem é de backoffice por defeito entra sempre nesse posto</dd>
         <dt>Noite de serviço</dt><dd>Folga obrigatória no dia seguinte. Ao sábado ou domingo dá ainda uma folga extra na semana seguinte (menos ${fmtH(dayHours())} h no mínimo dessa semana)</dd>
-        <dt>Banco de horas</dt><dd>No dia de plantão escolhes se as horas normais são pagas ou vão para o banco; as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte. Descontar ${fmtH(dayHours())} h num dia equivale a uma folga</dd>
+        <dt>Banco de horas</dt><dd>As horas acima do mínimo da semana vão para o banco. No dia de plantão escolhes se as horas normais são pagas ou vão para o banco; as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte. Descontar ${fmtH(dayHours())} h num dia equivale a uma folga</dd>
       </dl>
       <p>Clica numa célula para escolher o turno e a hora de almoço. Para mudar horários, plantão e cobertura, <button class="linkbtn" data-action="tab" data-tab="turnos">edita os turnos</button>.</p>
     </aside>
@@ -1688,6 +1690,12 @@ function monthStats(monthKey) {
       if (c.sh?.night && d >= 5) r.extraOff++;
       r.dias.push({ day, shift: c.sh ? c.sh.short : `${fmtH(c.hrs)}h` });
     }
+  }
+  /* Horas extra semanais (acima do mínimo) contam no mês em que a semana termina. */
+  for (let wk = iso(mondayOf(new Date(y, m - 1, 1))); wk <= iso(mondayOf(new Date(y, m - 1, last))); wk = shiftWeek(wk, 1)) {
+    const fim = addDays(parseISO(wk), 6);
+    if (fim.getMonth() !== m - 1) continue;
+    sortedIds().forEach(id => { const o = weekStats(id, wk).over; if (o) { rows[id].banked += o; rows[id].over = (rows[id].over || 0) + o; } });
   }
   /* Saldo do banco no fim do mês */
   const lastWeek = iso(mondayOf(new Date(y, m - 1, last)));
@@ -1746,7 +1754,7 @@ function renderHours() {
     <tbody>${body}</tbody>
     <tfoot><tr><th class="emp">Total da equipa</th><td>${tot.turnos}</td><td>${tot.noites}</td><td>${tot.fds}</td><td class="vaccol">${tot.vac || '—'}</td><td class="sickcol">${tot.sick || '—'}</td><td>${fmtH(tot.work)}</td><td class="dbl">${fmtH(tot.dbl)}</td><td class="dbl">${fmtH(tot.apart)}</td><td class="bankcol">${tot.banked ? '+' + fmtH(tot.banked) : '—'}</td><td class="bankcol">${tot.used ? '−' + fmtH(tot.used) : '—'}</td><td>${fmtBank(tot.saldo)}</td></tr></tfoot>
   </table></div>
-  <p class="note">O <b>banco de horas</b> junta as horas normais do dia de plantão que escolheste não pagar (as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte e nunca vão para o banco), e desconta as horas de folga que a pessoa gastou. O saldo já inclui o valor inicial de cada ficha. As horas trabalhadas são o tempo real de presença, já sem o almoço e já com as horas a menos de quem chegou tarde ou saiu cedo; as horas dos extras contam pelo que marcaste em cada dia. As horas entre <b>${C.doubleFrom}</b> e <b>${C.doubleTo}</b> <b>não entram nas horas trabalhadas</b>: ficam na coluna «horas nocturnas» e pagam-se à parte, ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}. Na noite de serviço das ${shiftById('N')?.start || '19:00'} às ${shiftById('N')?.end || '07:00'} só as primeiras horas (até às ${C.doubleFrom}) contam como trabalhadas. Um turno conta no dia em que começa.</p>`}`;
+  <p class="note">O <b>banco de horas</b> junta as horas trabalhadas acima do mínimo de cada semana, as horas normais do dia de plantão que escolheste não pagar (as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte e nunca vão para o banco), e desconta as horas de folga que a pessoa gastou. O saldo já inclui o valor inicial de cada ficha. As horas trabalhadas são o tempo real de presença, já sem o almoço e já com as horas a menos de quem chegou tarde ou saiu cedo; as horas dos extras contam pelo que marcaste em cada dia. As horas entre <b>${C.doubleFrom}</b> e <b>${C.doubleTo}</b> <b>não entram nas horas trabalhadas</b>: ficam na coluna «horas nocturnas» e pagam-se à parte, ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}. Na noite de serviço das ${shiftById('N')?.start || '19:00'} às ${shiftById('N')?.end || '07:00'} só as primeiras horas (até às ${C.doubleFrom}) contam como trabalhadas. Um turno conta no dia em que começa.</p>`}`;
 }
 
 function renderTeam() {

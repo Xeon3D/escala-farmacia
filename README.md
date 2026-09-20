@@ -177,7 +177,8 @@ exportação e importação em JSON.
 
 - **Mínimo semanal**: cada pessoa tem de chegar às horas da semana (40 h por omissão,
   com valor próprio na ficha para quem faz part-time). As horas descontadas do banco
-  contam para esse mínimo; quem ficar abaixo aparece nos alertas da semana.
+  contam para esse mínimo; quem ficar abaixo aparece nos alertas da semana. **O que
+  passar do mínimo são horas extra e entram no banco de horas**, para gastar depois.
 - **Dia de plantão**: em cada turno desse dia escolhes, no menu da célula, se as horas
   são **pagas** ou vão para o **banco de horas**. Só as horas normais vão para o banco:
   as horas entre as 22:00 e as 09:00 são sempre pagas à parte (a dobrar) e nunca entram
