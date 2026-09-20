@@ -1197,12 +1197,16 @@ function generate(wk) {
       else if (c && !c.sh && c.bank) { cells[id][d] = { bank: c.bank }; hours[id] += c.bank; }
     }
   });
-  const hardOk = (id, d, sid, extraSlot = 0) => {
+  /* Para o plantão, o dia seguinte noutra semana não conta: essa semana é gerada (ou regenerada) depois. */
+  const lookupSemana = (w, id, dd) => (dd > 6 ? null : lookup(w, id, dd));
+  const hardOk = (id, d, sid, extraSlot = 0, look = lookup) => {
     const e = state.employees[id], sh = shiftOn(shiftById(sid), d);
     if (!sh) return false;
-    return !cellIssues(e, id, wk, d, { s: sid, sh, l: '' }, lookup, true).some(i => i.lvl === 'bad')
+    return !cellIssues(e, id, wk, d, { s: sid, sh, l: '' }, look, true).some(i => i.lvl === 'bad')
       && count[id] < (e.maxPerWeek || 5) + extraSlot;
   };
+  /* Noites feitas nas últimas semanas, para rodar o plantão pela equipa. */
+  const nightsBefore = id => { let n = 0; for (let k = 1; k <= 6; k++) for (let d = 0; d < 7; d++) if (getCell(shiftWeek(wk, -k), id, d)?.sh?.night) n++; return n; };
   const put = (id, d, sid) => {
     const sh = shiftOn(shiftById(sid), d);
     cells[id][d] = { s: sid }; count[id]++; hours[id] += hoursOf(sh, '').normal;
@@ -1215,6 +1219,24 @@ function generate(wk) {
     const sh = shiftById(fx);
     if (!sh || (sh.onlyDuty && needFor(sh, d, wk) === 0)) continue;
     if (hardOk(id, d, fx)) put(id, d, fx);
+  }
+  /* O plantão primeiro: é o turno que tem mesmo de ficar coberto, e quem o faz fica de folga no dia seguinte. */
+  {
+    const dd = dutyDay(wk);
+    for (const sh of sortedShifts().filter(x => x.onlyDuty || x.night)) {
+      let have = ids.filter(id => cells[id][dd]?.s === sh.id).length;
+      const need = needFor(sh, dd, wk);
+      while (have < need) {
+        const cands = ids.filter(id => !cells[id][dd] && hardOk(id, dd, sh.id, 0, lookupSemana));
+        if (!cands.length) break;
+        const score = id => {
+          const e = state.employees[id], pref = (e.preferred || []).map(normId);
+          return nightsBefore(id) * 10 + (pref.length ? (pref.includes(sh.id) ? -6 : 12) : 0) + Math.random() * 4;
+        };
+        cands.sort((a, b) => score(a) - score(b));
+        put(cands[0], dd, sh.id); have++;
+      }
+    }
   }
   for (let d = 0; d < 7; d++) {
     for (const sh of sortedShifts()) {
