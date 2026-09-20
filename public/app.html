@@ -177,6 +177,7 @@ table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:980px}
 td.tot .bank{color:var(--bank-ink);font-family:var(--mono);font-size:11.5px}
 td.tot .bank.used{color:var(--warn)}
 td.tot .saldo{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+td.tot button.saldo{display:block;text-decoration:underline dotted;font-weight:400;cursor:pointer}
 .cell.empty{border:1px dashed var(--line);color:var(--ink-3)}
 .cell.empty:hover:not(:disabled){border-color:var(--ink-3)}
 .cell:not(.empty):hover:not(:disabled){filter:brightness(.97)}
@@ -252,6 +253,9 @@ table.hours{border-collapse:separate;border-spacing:0;width:100%;min-width:760px
 .hours .big{font:600 15px var(--display)}
 .hours .dbl{color:var(--n-ink)}
 .hours .bankcol{color:var(--bank-ink);font-family:var(--mono);font-size:13px}
+.linkbtn.mono{font-family:var(--mono);font-size:13px;color:var(--bank-ink)}
+.movs{width:100%;border-collapse:collapse;font-size:13px}.movs th,.movs td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.movs td.n,.movs th.n{text-align:right;font-family:var(--mono);white-space:nowrap}.movs .pos{color:var(--ok)}.movs .neg{color:var(--bad)}.movs .wk{color:var(--ink-3);white-space:nowrap}
 .hours .vaccol{color:var(--vac-ink);font-family:var(--mono);font-size:13px}
 .hours .neg,.summary b.neg{color:var(--warn)}
 .hours tfoot td,.hours tfoot th{font-weight:600;border-top:2px solid var(--line);border-bottom:0;background:var(--surface)}
@@ -560,6 +564,14 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
       <button type="button" class="btn" data-action="close-av">Cancelar</button>
       <button type="submit" class="btn primary">Guardar</button>
     </footer>
+  </form>
+</dialog>
+
+<dialog id="bankdlg">
+  <form class="dlg" method="dialog">
+    <header><h2 id="bank-title">Banco de horas</h2></header>
+    <div class="body" id="bank-body"></div>
+    <footer><span class="spacer"></span><button type="submit" class="btn primary">Fechar</button></footer>
   </form>
 </dialog>
 
@@ -1061,6 +1073,34 @@ function weekStats(id, wk) {
   return out;
 }
 
+/** Movimentos do banco de horas de uma pessoa, semana a semana, do mais recente para o mais antigo. */
+function bankMovements(id, limit = 40) {
+  const e = state.employees[id];
+  const weeks = Object.keys(state.schedules).sort();
+  const movs = [];
+  let saldo = +e.bankInitial || 0;
+  if (saldo) movs.push({ wk: '', when: 'Início', what: 'Banco já acumulado (ficha)', h: saldo, saldo });
+  for (const wk of weeks) {
+    const st = weekStats(id, wk);
+    for (let d = 0; d < 7; d++) {
+      const c = getCell(wk, id, d);
+      if (!c) continue;
+      const when = `${DAYS[d]} ${addDays(parseISO(wk), d).getDate()} ${MONTHS[addDays(parseISO(wk), d).getMonth()]}`;
+      if (c.sh && d === dutyDay(wk) && c.pay === 'bank') { const h = cellHours(c).normal; saldo += h; movs.push({ wk, when, what: 'Horas do plantão para o banco', h, saldo }); }
+      if (c.bank) { saldo -= c.bank; movs.push({ wk, when, what: isFullDayOff(c) ? 'Folga paga pelo banco' : 'Horas descontadas do banco', h: -c.bank, saldo }); }
+    }
+    if (st.over) { saldo += st.over; movs.push({ wk, when: `Semana ${isoWeek(parseISO(wk))}`, what: `Horas extra (${fmtH(st.work)} h feitas, mínimo ${fmtH(st.target)} h)`, h: st.over, saldo }); }
+  }
+  return movs.reverse().slice(0, limit);
+}
+function openBankReport(id) {
+  const e = state.employees[id]; if (!e) return;
+  const movs = bankMovements(id);
+  $('#bank-title').textContent = `Banco de horas · ${e.name}`;
+  $('#bank-body').innerHTML = `<p style="margin:0 0 10px;color:var(--ink-2);font-size:14px">Saldo atual <b class="${bankBalance(id) < 0 ? 'neg' : ''}">${fmtBank(bankBalance(id))}</b> · ${movs.length === 1 ? "1 movimento" : `últimos ${movs.length} movimentos`}, do mais recente para o mais antigo.</p>` +
+    (movs.length ? `<div class="grid-wrap"><table class="movs"><thead><tr><th>Quando</th><th>Movimento</th><th class="n">Horas</th><th class="n">Saldo</th></tr></thead><tbody>${movs.map(m => `<tr><td><span class="wk">${esc(m.when)}</span>${m.wk ? `<br><small class="wk">${esc(weekRange(m.wk))}</small>` : ''}</td><td>${esc(m.what)}</td><td class="n ${m.h > 0 ? 'pos' : 'neg'}">${fmtBank(m.h)}</td><td class="n">${fmtBank(m.saldo)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">Ainda não há movimentos.</p>');
+  $('#bankdlg').showModal();
+}
 /** Saldo do banco de horas até ao fim de uma semana (inclusive). */
 function bankBalance(id, untilWeek) {
   const e = state.employees[id];
@@ -1552,7 +1592,7 @@ function renderSchedule() {
       (st.banked ? `<span class="bank">banco +${fmtH(st.banked)} h${st.over ? ` (${fmtH(st.over)} h extra)` : ''}</span>` : '') +
       (st.used ? `<span class="bank used">banco −${fmtH(st.used)} h</span>` : '') +
       (st.less ? `<span class="pay" style="color:var(--warn)">−${fmtH(st.less)} h a menos</span>` : '') +
-      `<span class="saldo" title="Saldo do banco no fim desta semana">saldo ${fmtBank(saldoFim)}</span></td></tr>`;
+      `<button class="linkbtn saldo" data-action="bank-report" data-id="${esc(id)}" title="Ver os movimentos do banco de horas">saldo ${fmtBank(saldoFim)}</button></td></tr>`;
   }
 
   let foot = '', need = 0, filled = 0;
@@ -1749,11 +1789,11 @@ function monthStats(monthKey) {
 function renderHours() {
   const [y, m] = state.month.split('-').map(Number);
   const rows = monthStats(state.month), ids = sortedIds();
-  const tot = { turnos: 0, noites: 0, fds: 0, work: 0, dbl: 0, apart: 0, pay: 0, banked: 0, used: 0, saldo: 0, vac: 0, sick: 0 };
+  const tot = { turnos: 0, noites: 0, fds: 0, work: 0, dbl: 0, apart: 0, pay: 0, banked: 0, used: 0, saldo: 0, vac: 0, sick: 0, over: 0 };
   ids.forEach(id => {
     const r = rows[id];
     tot.turnos += r.turnos; tot.noites += r.noites; tot.fds += r.fds; tot.work += r.work;
-    tot.dbl += r.dbl; tot.apart += r.apart; tot.pay += r.pay; tot.banked += r.banked; tot.used += r.used; tot.saldo += r.saldo; tot.vac += r.vac; tot.sick += r.sick;
+    tot.dbl += r.dbl; tot.apart += r.apart; tot.pay += r.pay; tot.banked += r.banked; tot.over += r.over || 0; tot.used += r.used; tot.saldo += r.saldo; tot.vac += r.vac; tot.sick += r.sick;
   });
   const maxPay = Math.max(1, ...ids.map(id => rows[id].work));
   const C = cfg();
@@ -1767,6 +1807,7 @@ function renderHours() {
       <td class="vaccol">${r.vac || '<span class="muted">—</span>'}</td>
       <td class="sickcol">${r.sick || '<span class="muted">—</span>'}</td>
       <td><span class="big">${fmtH(r.work)}</span><div class="bar" title="${fmtH(r.work)} h trabalhadas"><i style="width:${Math.round(r.work / maxPay * 100)}%"></i></div></td>
+      <td class="bankcol"><button class="linkbtn mono" data-action="bank-report" data-id="${esc(id)}" title="Ver os movimentos do banco de horas">${r.over ? '+' + fmtH(r.over) + ' h' : '—'}</button></td>
       <td class="dbl">${r.dbl ? fmtH(r.dbl) : '<span class="muted">—</span>'}</td>
       <td class="dbl">${r.apart ? fmtH(r.apart) : '<span class="muted">—</span>'}</td>
       <td class="bankcol">${r.banked ? '+' + fmtH(r.banked) : '<span class="muted">—</span>'}</td>
@@ -1794,11 +1835,11 @@ function renderHours() {
     <span><b class="${tot.saldo < 0 ? 'neg' : ''}">${fmtBank(tot.saldo)}</b>no banco de horas</span>
   </div>
   <div class="grid-wrap"><table class="hours">
-    <thead><tr><th class="emp">Funcionário</th><th>Turnos</th><th>Noites</th><th>Fins de semana</th><th>Dias de férias</th><th>Baixa</th><th>Horas trabalhadas</th><th>Horas nocturnas</th><th>A pagar pelas nocturnas</th><th>Para o banco</th><th>Descontadas</th><th>Saldo do banco</th></tr></thead>
+    <thead><tr><th class="emp">Funcionário</th><th>Turnos</th><th>Noites</th><th>Fins de semana</th><th>Dias de férias</th><th>Baixa</th><th>Horas trabalhadas</th><th>Horas extra</th><th>Horas nocturnas</th><th>A pagar pelas nocturnas</th><th>Para o banco</th><th>Descontadas</th><th>Saldo do banco</th></tr></thead>
     <tbody>${body}</tbody>
-    <tfoot><tr><th class="emp">Total da equipa</th><td>${tot.turnos}</td><td>${tot.noites}</td><td>${tot.fds}</td><td class="vaccol">${tot.vac || '—'}</td><td class="sickcol">${tot.sick || '—'}</td><td>${fmtH(tot.work)}</td><td class="dbl">${fmtH(tot.dbl)}</td><td class="dbl">${fmtH(tot.apart)}</td><td class="bankcol">${tot.banked ? '+' + fmtH(tot.banked) : '—'}</td><td class="bankcol">${tot.used ? '−' + fmtH(tot.used) : '—'}</td><td>${fmtBank(tot.saldo)}</td></tr></tfoot>
+    <tfoot><tr><th class="emp">Total da equipa</th><td>${tot.turnos}</td><td>${tot.noites}</td><td>${tot.fds}</td><td class="vaccol">${tot.vac || '—'}</td><td class="sickcol">${tot.sick || '—'}</td><td>${fmtH(tot.work)}</td><td class="bankcol">${tot.over ? '+' + fmtH(tot.over) + ' h' : '—'}</td><td class="dbl">${fmtH(tot.dbl)}</td><td class="dbl">${fmtH(tot.apart)}</td><td class="bankcol">${tot.banked ? '+' + fmtH(tot.banked) : '—'}</td><td class="bankcol">${tot.used ? '−' + fmtH(tot.used) : '—'}</td><td>${fmtBank(tot.saldo)}</td></tr></tfoot>
   </table></div>
-  <p class="note">O <b>banco de horas</b> junta as horas trabalhadas acima do mínimo de cada semana, as horas normais do dia de plantão que escolheste não pagar (as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte e nunca vão para o banco), e desconta as horas de folga que a pessoa gastou. O saldo já inclui o valor inicial de cada ficha. As horas trabalhadas são o tempo real de presença, já sem o almoço e já com as horas a menos de quem chegou tarde ou saiu cedo; as horas dos extras contam pelo que marcaste em cada dia. As horas entre <b>${C.doubleFrom}</b> e <b>${C.doubleTo}</b> <b>não entram nas horas trabalhadas</b>: ficam na coluna «horas nocturnas» e pagam-se à parte, ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}. Na noite de serviço das ${shiftById('N')?.start || '19:00'} às ${shiftById('N')?.end || '07:00'} só as primeiras horas (até às ${C.doubleFrom}) contam como trabalhadas. Um turno conta no dia em que começa.</p>`}`;
+  <p class="note">O <b>banco de horas</b> junta as horas trabalhadas acima do mínimo de cada semana (coluna «horas extra» — clica no valor para ver os movimentos), as horas normais do dia de plantão que escolheste não pagar (as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte e nunca vão para o banco), e desconta as horas de folga que a pessoa gastou. O saldo já inclui o valor inicial de cada ficha. As horas trabalhadas são o tempo real de presença, já sem o almoço e já com as horas a menos de quem chegou tarde ou saiu cedo; as horas dos extras contam pelo que marcaste em cada dia. As horas entre <b>${C.doubleFrom}</b> e <b>${C.doubleTo}</b> <b>não entram nas horas trabalhadas</b>: ficam na coluna «horas nocturnas» e pagam-se à parte, ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}. Na noite de serviço das ${shiftById('N')?.start || '19:00'} às ${shiftById('N')?.end || '07:00'} só as primeiras horas (até às ${C.doubleFrom}) contam como trabalhadas. Um turno conta no dia em que começa.</p>`}`;
 }
 
 function renderTeam() {
@@ -1823,7 +1864,7 @@ function renderTeam() {
         <dt>Indisponível</dt><dd>${esc(off)}</dd>
         <dt>Turnos fixos</dt><dd>${esc(fixed)}</dd>
         <dt>Semana</dt><dd>${weeklyTarget(e) ? `${fmtH(weeklyTarget(e))} h${e.weeklyHours == null ? ' (valor geral)' : ''}` : 'Sem mínimo'}</dd>
-        <dt>Banco</dt><dd class="${bankBalance(id) < 0 ? 'no' : 'yes'}">${fmtBank(bankBalance(id))}${+e.bankInitial ? ` (inicial ${fmtBank(+e.bankInitial)})` : ''}</dd>
+        <dt>Banco</dt><dd class="${bankBalance(id) < 0 ? 'no' : 'yes'}"><button class="linkbtn" data-action="bank-report" data-id="${esc(id)}">${fmtBank(bankBalance(id))}</button>${+e.bankInitial ? ` (inicial ${fmtBank(+e.bankInitial)})` : ''}</dd>
       </dl>
       ${e.notes ? `<p class="notes">${esc(e.notes)}</p>` : ''}
       <div class="card-foot">
@@ -2595,6 +2636,7 @@ document.addEventListener('click', async ev => {
       break;
     }
     case 'vac-range': openVacation(el.dataset.id); break;
+    case 'bank-report': openBankReport(el.dataset.id); break;
     case 'bank-off': {
         const ctx = menuCtx; if (!ctx) break; closeMenu();
       const h = +el.dataset.h;
