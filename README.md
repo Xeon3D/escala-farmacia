@@ -53,6 +53,31 @@ administrador e fecha as sessões abertas. Em Docker:
 docker exec -it escala-farmacia python server.py --reset-admin o-teu-utilizador
 ```
 
+## Atualizar sem recriar o contentor
+
+O separador **Turnos** tem, para administradores, o painel *Versão da aplicação*:
+
+1. **Procurar atualizações** — lê o ficheiro `VERSION` do repositório e compara com a
+   versão a correr.
+2. **Atualizar e reiniciar** — descarrega o código do repositório, guarda-o em
+   `/data/app/versions/<versão>` e reinicia o processo do servidor dentro do mesmo
+   contentor. A base de dados, as contas e as sessões não são tocadas.
+3. **Reverter** — volta à versão anterior (ou à que vem na imagem) e reinicia.
+
+Como o código fica no volume `/data`, a atualização sobrevive a reinícios do contentor.
+Se uma versão instalada não arrancar três vezes seguidas, o arranque volta sozinho à
+versão da imagem e avisa nos registos.
+
+Do pacote descarregado só são aceites o `server.py`, o `VERSION` e a pasta `public/`, e o
+`server.py` é compilado antes de ser instalado. Só administradores podem atualizar.
+Variáveis: `ESCALA_UPDATE_REPO` (por omissão `Xeon3D/escala-farmacia`),
+`ESCALA_UPDATE_REF` (ramo ou etiqueta, por omissão `main`), `ESCALA_APP_DIR` e
+`ESCALA_UPDATES=0` para desligar a funcionalidade.
+
+Para lançar uma versão nova: sobe `APP_VERSION` no `server.py` **e** o ficheiro
+`VERSION` (têm de ser iguais), faz commit e push. Quem tiver a aplicação instalada
+passa a ver a atualização disponível.
+
 ## Docker
 
 ```bash

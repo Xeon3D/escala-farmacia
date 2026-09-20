@@ -1,4 +1,5 @@
 # Base de dados e dados locais
+app/
 escala.db
 escala.db-wal
 escala.db-shm

@@ -1,5 +1,6 @@
 .git
 .github
+app/
 .claude
 escala.db
 escala.db-wal
