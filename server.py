@@ -46,7 +46,7 @@ WEEK_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 DEFAULT_SHIFTS = [
     {"id": "s9",  "name": "Abertura",         "short": "9h",  "start": "09:00", "end": "18:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 1, "weekend": 2, "saturday": 2},
     {"id": "s10", "name": "Intermédio",       "short": "10h", "start": "10:00", "end": "19:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 1, "weekend": 0, "saturday": 0},
-    {"id": "s11", "name": "Fecho",            "short": "11h", "start": "11:00", "end": "20:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 2, "weekend": 1, "saturday": 1},
+    {"id": "s11", "name": "Fecho",            "short": "11h", "start": "10:30", "end": "19:30", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 2, "weekend": 1, "saturday": 1},
     {"id": "N",   "name": "Noite de serviço", "short": "N",   "start": "19:00", "end": "07:00", "lunch": False, "night": True,  "onlyDuty": True,  "weekday": 1, "weekend": 1, "saturday": 1},
 ]
 
@@ -62,13 +62,14 @@ DEFAULT_SETTINGS = {
     "weeklyHours": 40,
     "dayHours": 8,
     "backofficePerDay": 1,
-    "dutyAnchorWeek": "2026-09-14",
-    "dutyAnchorDay": 6,
-    "dutyStep": 1,
+    "dutyAnchorWeek": "2026-09-21",
+    "dutyAnchorDay": 0,
+    "dutyStep": -1,
     # Horário de abertura, de segunda (índice 0) a domingo; "closed" marca o encerramento semanal.
-    "opening": [{"open": "09:00", "close": "20:00", "closed": False} for _ in range(7)],
+    "opening": [{"open": "09:00", "close": "19:30", "closed": False} for _ in range(5)]
+               + [{"open": "09:00", "close": "13:00", "closed": False}, {"open": "09:00", "close": "20:00", "closed": True}],
     # Períodos com outro mínimo ao balcão: [{"from": "12:00", "to": "16:00", "min": 2}]
-    "presenceBands": [],
+    "presenceBands": [{"from": "12:00", "to": "16:00", "min": 2}, {"from": "19:00", "to": "19:30", "min": 2}],
     # Aparência: título, subtítulo e logótipo (data URL de imagem, até ~200 KB).
     "siteTitle": "Escala da Farmácia",
     "siteTagline": "",
@@ -83,14 +84,15 @@ LOGO_RE = re.compile(r"^data:image/(png|jpeg|webp|gif|svg\+xml);base64,[A-Za-z0-
 
 # Equipa de exemplo, criada só quando a base de dados está vazia, para a aplicação
 # abrir com alguma coisa. Apaga-a e mete a tua equipa real.
+# (id, nome, função, cor, aceita noites, aceita fins de semana, preferidos, dias indisponíveis, máx. (sem uso), fixos, notas, backoffice)
 SEED_EMPLOYEES = [
-    ("ex1", "Helena Marques", "Farmacêutica diretora técnica", "#0A7A5A", 0, 0, ["s9"], [], 5, {"0": "s9", "1": "s9", "2": "s9", "3": "s9", "4": "s9"}, "Exemplo"),
-    ("ex2", "Rui Tavares", "Farmacêutico", "#2F7FC1", 1, 1, ["s11", "N"], [], 5, {}, "Exemplo"),
-    ("ex3", "Sofia Almeida", "Técnica de farmácia", "#B4458C", 0, 1, ["s9", "s11"], [2], 5, {}, "Exemplo · às quartas tem formação"),
-    ("ex4", "Tiago Fonseca", "Técnico de farmácia", "#5552C2", 1, 1, ["N"], [], 5, {}, "Exemplo"),
-    ("ex5", "Marta Pinheiro", "Técnica auxiliar de farmácia", "#C0622B", 0, 1, ["s11"], [], 4, {}, "Exemplo · part-time"),
-    ("ex6", "Diogo Ramos", "Farmacêutico", "#3E7F8C", 1, 1, ["s10", "N"], [], 5, {}, "Exemplo"),
-    ("ex7", "Inês Carvalho", "Técnica de farmácia", "#6B5B95", 0, 1, ["s9", "s11"], [], 5, {}, "Exemplo"),
+    ("ex1", "Carla",     "Técnico(a) de farmácia", "#0A7A5A", 0, 1, [], [], 5, {}, "Exemplo", 0),
+    ("ex2", "Liliana",   "Técnico(a) de farmácia", "#2F7FC1", 1, 0, [], [], 5, {}, "Exemplo", 0),
+    ("ex3", "Bruno",     "Técnico(a) de farmácia", "#B4458C", 1, 0, [], [], 5, {}, "Exemplo", 0),
+    ("ex4", "Alexandra", "Técnico(a) de farmácia", "#5552C2", 1, 1, [], [], 5, {}, "Exemplo", 0),
+    ("ex5", "Fernanda",  "Técnico(a) de farmácia", "#C0622B", 0, 1, [], [], 5, {}, "Exemplo", 0),
+    ("ex6", "Filipa",    "Técnico(a) de farmácia", "#3E7F8C", 0, 1, [], [], 5, {}, "Exemplo", 0),
+    ("ex7", "Cátia",     "Administrativo(a)",      "#6B5B95", 0, 0, [], [], 5, {"0": "s9", "1": "s9", "2": "s9", "3": "s9", "4": "s9"}, "Exemplo · backoffice", 1),
 ]
 
 SCHEMA = """
@@ -220,11 +222,11 @@ def init_data() -> None:
         for k, v in DEFAULT_SETTINGS.items():
             conn.execute("INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)", (k, json.dumps(v)))
         if not conn.execute("SELECT 1 FROM employees LIMIT 1").fetchone():
-            for (eid, name, role, color, night, weekend, pref, off, mx, fixed, notes) in SEED_EMPLOYEES:
+            for (eid, name, role, color, night, weekend, pref, off, mx, fixed, notes, back) in SEED_EMPLOYEES:
                 conn.execute(
-                    "INSERT INTO employees (id,name,role,color,accepts_night,accepts_weekend,preferred,days_off,max_per_week,fixed,notes)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                    (eid, name, role, color, night, weekend, json.dumps(pref), json.dumps(off), mx, json.dumps(fixed), notes),
+                    "INSERT INTO employees (id,name,role,color,accepts_night,accepts_weekend,preferred,days_off,max_per_week,fixed,notes,backoffice)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (eid, name, role, color, night, weekend, json.dumps(pref), json.dumps(off), mx, json.dumps(fixed), notes, back),
                 )
         conn.commit()
 

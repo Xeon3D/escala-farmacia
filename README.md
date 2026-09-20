@@ -265,6 +265,8 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
   2. **Sábado** — só abre de manhã e escala apenas as «Pessoas ao sábado» (2 por omissão),
      a rodar por quem fez menos sábados.
   3. **Domingo** — fechado; só trabalha o plantão quando calha ao domingo.
+  Em cada cabeçalho de dia há um botão ↻ **«gerar a partir daqui»**: os dias anteriores
+  ficam como estão e a escala é refeita desse dia até domingo.
   O plantão é sempre o primeiro a ser atribuído (a rodar por quem fez menos noites). Quando
   alguém não chega às horas (dias indisponíveis, folgas obrigatórias), a semana avisa.
 - **Plantão**: um dia por semana, a recuar um dia por semana. A semana de referência e
