@@ -1124,16 +1124,17 @@ function bankMovements(id, limit = 40) {
   const movs = [];
   let saldo = +e.bankInitial || 0;
   if (saldo) movs.push({ wk: '', when: 'Início', what: 'Banco já acumulado (ficha)', h: saldo, saldo });
+  const add = (m, done) => { if (done) { saldo += m.h; m.saldo = saldo; } else m.future = true; movs.push(m); };
   for (const wk of weeks) {
     const st = weekStats(id, wk);
     for (let d = 0; d < 7; d++) {
       const c = getCell(wk, id, d);
       if (!c) continue;
       const when = `${DAYS[d]} ${addDays(parseISO(wk), d).getDate()} ${MONTHS[addDays(parseISO(wk), d).getMonth()]}`;
-      if (c.sh && d === dutyDay(wk) && c.pay === 'bank') { const h = cellHours(c).normal; saldo += h; movs.push({ wk, when, what: 'Horas do plantão para o banco', h, saldo }); }
-      if (c.bank) { saldo -= c.bank; movs.push({ wk, when, what: isFullDayOff(c) ? 'Folga paga pelo banco' : 'Horas descontadas do banco', h: -c.bank, saldo }); }
+      if (c.sh && d === dutyDay(wk) && c.pay === 'bank') add({ wk, when, what: 'Horas do plantão para o banco', h: cellHours(c).normal }, dayDone(wk, d));
+      if (c.bank) add({ wk, when, what: isFullDayOff(c) ? 'Folga paga pelo banco' : 'Horas descontadas do banco', h: -c.bank }, dayDone(wk, d));
     }
-    if (st.over) { saldo += st.over; movs.push({ wk, when: `Semana ${isoWeek(parseISO(wk))}`, what: `Horas extra (${fmtH(st.work)} h feitas, mínimo ${fmtH(st.target)} h)`, h: st.over, saldo }); }
+    if (st.over) add({ wk, when: `Semana ${isoWeek(parseISO(wk))}`, what: `Horas extra (${fmtH(st.work)} h feitas, mínimo ${fmtH(st.target)} h)`, h: st.over }, weekDone(wk));
   }
   return movs.reverse().slice(0, limit);
 }
@@ -1141,29 +1142,46 @@ function openBankReport(id) {
   const e = state.employees[id]; if (!e) return;
   const movs = bankMovements(id);
   $('#bank-title').textContent = `Banco de horas · ${e.name}`;
-  $('#bank-body').innerHTML = `<p style="margin:0 0 10px;color:var(--ink-2);font-size:14px">Saldo atual <b class="${bankBalance(id) < 0 ? 'neg' : ''}">${fmtBank(bankBalance(id))}</b> · ${movs.length === 1 ? "1 movimento" : `últimos ${movs.length} movimentos`}, do mais recente para o mais antigo.</p>` +
-    (movs.length ? `<div class="grid-wrap"><table class="movs"><thead><tr><th>Quando</th><th>Movimento</th><th class="n">Horas</th><th class="n">Saldo</th></tr></thead><tbody>${movs.map(m => `<tr><td><span class="wk">${esc(m.when)}</span>${m.wk ? `<br><small class="wk">${esc(weekRange(m.wk))}</small>` : ''}</td><td>${esc(m.what)}</td><td class="n ${m.h > 0 ? 'pos' : 'neg'}">${fmtBank(m.h)}</td><td class="n">${fmtBank(m.saldo)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">Ainda não há movimentos.</p>');
+  $('#bank-body').innerHTML = `<p style="margin:0 0 10px;color:var(--ink-2);font-size:14px">Saldo atual <b class="${bankBalance(id) < 0 ? 'neg' : ''}">${fmtBank(bankBalance(id))}</b> (só horas já trabalhadas; o que está escalado para a frente aparece como «previsto») · ${movs.length === 1 ? "1 movimento" : `últimos ${movs.length} movimentos`}, do mais recente para o mais antigo.</p>` +
+    (movs.length ? `<div class="grid-wrap"><table class="movs"><thead><tr><th>Quando</th><th>Movimento</th><th class="n">Horas</th><th class="n">Saldo</th></tr></thead><tbody>${movs.map(m => `<tr><td><span class="wk">${esc(m.when)}</span>${m.wk ? `<br><small class="wk">${esc(weekRange(m.wk))}</small>` : ''}</td><td>${esc(m.what)}</td><td class="n ${m.h > 0 ? 'pos' : 'neg'}">${fmtBank(m.h)}</td><td class="n">${m.future ? '<span class="muted" title="Ainda não aconteceu: só conta depois de trabalhado">previsto</span>' : fmtBank(m.saldo)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">Ainda não há movimentos.</p>');
   $('#bankdlg').showModal();
 }
 /** Saldo do banco de horas até ao fim de uma semana (inclusive). */
+/* O banco só conta horas efetivamente trabalhadas: movimentos de dias futuros ficam «previstos»
+   e não entram no saldo; as horas extra de uma semana só entram quando a semana acabou. */
+const todayISO = () => iso(new Date());
+const dayDone = (wk, d) => iso(addDays(parseISO(wk), d)) <= todayISO();
+const weekDone = wk => dayDone(wk, 6);
+/** Movimentos já realizados de uma semana: banco do plantão e descontos até hoje; horas extra só com a semana fechada. */
+function bankRealized(id, wk) {
+  const st = weekStats(id, wk);
+  if (weekDone(wk)) return st.banked - st.used;
+  let v = 0;
+  for (let d = 0; d < 7; d++) {
+    if (!dayDone(wk, d)) break;
+    const c = getCell(wk, id, d);
+    if (!c) continue;
+    if (c.sh && d === dutyDay(wk) && c.pay === 'bank') v += cellHours(c).normal;
+    if (c.bank) v -= c.bank;
+  }
+  return v;
+}
 function bankBalance(id, untilWeek) {
   const e = state.employees[id];
   let saldo = +e.bankInitial || 0;
   for (const wk of Object.keys(state.schedules).sort()) {
     if (untilWeek && wk > untilWeek) continue;
-    const s = weekStats(id, wk);
-    saldo += s.banked - s.used;
+    saldo += bankRealized(id, wk);
   }
   return saldo;
 }
-/** Saldo antes de uma semana, para saber se os descontos dessa semana cabem. */
+/** Saldo antes de uma semana (só horas já trabalhadas), para saber se os descontos dessa semana cabem. */
 function bankBefore(id, week) {
   const e = state.employees[id];
   let saldo = +e.bankInitial || 0;
   for (const wk of Object.keys(state.schedules).sort()) {
     if (wk >= week) continue;
-    const s = weekStats(id, wk);
-    saldo += s.banked - s.used;
+    saldo += bankRealized(id, wk);
   }
   return saldo;
 }
@@ -1653,7 +1671,7 @@ function renderSchedule() {
       (st.banked ? `<span class="bank">banco +${fmtH(st.banked)} h${st.over ? ` (${fmtH(st.over)} h extra)` : ''}</span>` : '') +
       (st.used ? `<span class="bank used">banco −${fmtH(st.used)} h</span>` : '') +
       (st.less ? `<span class="pay" style="color:var(--warn)">−${fmtH(st.less)} h a menos</span>` : '') +
-      `<button class="linkbtn saldo" data-action="bank-report" data-id="${esc(id)}" title="Ver os movimentos do banco de horas">saldo ${fmtBank(saldoFim)}</button></td></tr>`;
+      `<button class="linkbtn saldo" data-action="bank-report" data-id="${esc(id)}" title="Saldo do banco com o que já foi trabalhado até hoje (as horas desta semana só entram quando forem feitas)">saldo ${fmtBank(saldoFim)}</button></td></tr>`;
   }
 
   let foot = '', need = 0, filled = 0;
