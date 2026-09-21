@@ -919,11 +919,17 @@ img{max-width:100%}
 
 
 def phrases() -> list[str]:
+    """Piadas de public/frases.txt: separadas por uma linha «--»; podem ter várias linhas. Linhas com # ignoram-se."""
     try:
-        lines = [ln.strip() for ln in (PUBLIC / "frases.txt").read_text(encoding="utf-8").splitlines()]
+        text = (PUBLIC / "frases.txt").read_text(encoding="utf-8")
     except OSError:
         return []
-    return [ln[:200] for ln in lines if ln and not ln.startswith("#")]
+    out: list[str] = []
+    for bloco in text.split("\n--"):
+        linhas = [ln.strip() for ln in bloco.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+        if linhas:
+            out.append("\n".join(linhas)[:400])
+    return out
 
 
 def daily_phrase() -> str:
@@ -1043,7 +1049,7 @@ class Handler(BaseHTTPRequestHandler):
             import urllib.parse
             q = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
             if q.get("random"):
-                return self.send_json({"text": random_phrase((q.get("not") or [""])[0][:200])})
+                return self.send_json({"text": random_phrase((q.get("not") or [""])[0][:400])})
             return self.send_json({"text": daily_phrase()})
         if path == "/api/app":
             if not self.require(admin=False):

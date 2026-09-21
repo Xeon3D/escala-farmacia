@@ -1,67 +1,117 @@
-# One joke per line. The app shows one per day (same all day) and swaps it for a random one when clicked.
-# Lines starting with # are ignored.
-I used to be a banker, but I lost interest.
-I'm reading a book about anti-gravity. It's impossible to put down.
-Why don't skeletons fight each other? They don't have the guts.
-I only know 25 letters of the alphabet. I don't know y.
-What do you call a fake noodle? An impasta.
-Did you hear about the claustrophobic astronaut? He just needed a little space.
-I told my wife she was drawing her eyebrows too high. She looked surprised.
-Why did the scarecrow win an award? He was outstanding in his field.
-I would tell you a chemistry joke, but I know I wouldn't get a reaction.
-What do you call cheese that isn't yours? Nacho cheese.
-I'm on a seafood diet. I see food and I eat it.
-Why can't you trust atoms? They make up everything.
-How does a penguin build its house? Igloos it together.
-What's brown and sticky? A stick.
-I asked the librarian if the library had books on paranoia. She whispered, "They're right behind you."
-I don't trust stairs. They're always up to something.
-Why did the bicycle fall over? It was two tired.
-What do you call a bear with no teeth? A gummy bear.
-I stayed up all night wondering where the sun went. Then it dawned on me.
-My wife said I should do lunges to stay in shape. That would be a big step forward.
-Why don't eggs tell jokes? They'd crack each other up.
-What did the ocean say to the beach? Nothing, it just waved.
-I used to play piano by ear, but now I use my hands.
-Why did the math book look sad? It had too many problems.
-What do you call a dog that does magic tricks? A labracadabrador.
-I'm terrified of elevators, so I'm taking steps to avoid them.
-Why did the coffee file a police report? It got mugged.
-What do you call a factory that makes okay products? A satisfactory.
-I had a joke about construction, but I'm still working on it.
-Parallel lines have so much in common. It's a shame they'll never meet.
-What's the best thing about Switzerland? I don't know, but the flag is a big plus.
-I'm so good at sleeping I can do it with my eyes closed.
-Why do cows wear bells? Because their horns don't work.
-What did one wall say to the other? I'll meet you at the corner.
-I lost my job at the bank on my first day. A woman asked me to check her balance, so I pushed her over.
-What do you call a sleeping dinosaur? A dino-snore.
-How do you make a tissue dance? Put a little boogie in it.
-I got a job at a bakery because I kneaded dough.
-Why are ghosts such bad liars? You can see right through them.
-The shovel was a ground-breaking invention.
-What did the grape say when it got stepped on? Nothing, it just let out a little wine.
-I'm afraid for the calendar. Its days are numbered.
-Why did the golfer bring two pairs of pants? In case he got a hole in one.
-Did you hear about the kidnapping at the park? They woke him up.
-What do you call a pile of cats? A meow-ntain.
-I asked my dog what two minus two is. He said nothing.
-Why shouldn't you write with a broken pencil? Because it's pointless.
-My boss told me to have a good day. So I went home.
-What do you call a can opener that doesn't work? A can't opener.
-Dear Math, grow up and solve your own problems.
-Where do fruits go on vacation? Pear-is.
-I ordered a chicken and an egg online. I'll let you know.
-Why did the tomato blush? It saw the salad dressing.
-Six-thirty is the best time on a clock, hands down.
-What kind of shoes do ninjas wear? Sneakers.
-I don't play soccer because I enjoy the sport. I'm just doing it for kicks.
-What's orange and sounds like a parrot? A carrot.
-Why was the broom late? It over-swept.
-I've started telling everyone about the benefits of eating dried grapes. It's all about raisin awareness.
-How do you organize a space party? You planet.
-Want to hear a joke about paper? Never mind, it's tearable.
-What do you call a fish with no eyes? A fsh.
-I made a pencil with two erasers. It was pointless.
-Why did the pharmacist walk softly? So as not to wake the sleeping pills.
-What do you call a pharmacist who's always late? A slow-release formula.
+# Piadas separadas por uma linha com "--". Cada piada pode ter várias linhas.
+# A aplicação mostra uma por dia (a mesma o dia todo) e troca por outra ao clicar.
+# Linhas a começar por # são ignoradas.
+
+Eu morava numa ilha e mudei-me para outra. Isto não foi um trocadilho, foi uma troca d'ilha.
+--
+Quando tiver uma ovelha, vou chamar-lhe Rover. Assim, quando a tosquiar, posso dizer que tenho lã de Rover.
+--
+Eu bebo café. A Cláudia, leite. Eu como gelado. O Clark, Kent.
+--
+Porque é que o lagarto deixou o filho de castigo?
+Porque ele réptil de ano.
+--
+Sabes porque é que convidavam sempre o Napoleão para as festas?
+Porque ele era Bom na Party.
+--
+Sabes qual é o contrário de volátil?
+Vem cá, sobrinho.
+--
+Uma pessoa passou dois dias na piscina e depois foi ao médico. Sabes qual foi o diagnóstico?
+Nada de mais.
+--
+Porque é que a Coca-Cola e a Fanta se dão tão bem?
+Porque se a Fanta quebra, a Coca-Cola.
+--
+Porque é que, na Argentina, as vacas estão sempre a olhar para o céu?
+Porque lá há boi nos ares.
+--
+Um músico foi à farmácia e pediu ao farmacêutico um lá menor. O farmacêutico disse que não tinha. Então, o músico pediu um ré médio.
+--
+Sabes como se chama o intestino do boi em espanhol?
+Intestino del gado.
+--
+Sabes quando foi a primeira vez que os americanos comeram carne?
+Quando chegou Cristóvão CoLombo.
+--
+Qual é o antónimo de simpatia?
+Nãopotio.
+--
+Sabes quais são os cereais preferidos dos vampiros?
+Aveia.
+--
+O que são dois pontos cinzentos no mar?
+Two-barões.
+--
+Sabes qual é a diferença entre uma lagoa e uma padaria?
+Na lagoa há sapinho. Na padaria, assa pão.
+--
+Qual é a fórmula química da água benta?
+H Deus O.
+--
+Porque é que as plantinhas não podem ficar doentes de madrugada?
+Porque só há médico de plantão.
+--
+Um bêbado atravessa a rua fora da passadeira e um carro buzina: "Bi bi!"
+O bêbado olha para o carro e responde: Eu também!
+--
+Como se faz uma omelete de chocolate?
+Com ovos da Páscoa.
+--
+O que é um pontinho preto na torre de um castelo?
+A pimenta-do-reino.
+--
+O que é um pontinho vermelho no meio da selva?
+Um morangotango.
+--
+O que acontece se esfregarmos uma lâmpada debaixo de água?
+Nasce um hidrogénio.
+--
+— João, porque é que estás a falar com as sapatilhas?
+— Porque aqui diz Converse.
+--
+— Qual é a panela que está sempre triste?
+— A panela depressão.
+--
+A mãe cigana diz, com muito respeito, ao filho Tó para rebentar um balão. Qual é o nome do filme?
+— Toy Story.
+--
+O que está escrito na campa do Pai Natal?
+Ele já não está entre trenós.
+--
+Para que servem os óculos vermelhos?
+— Para vermelhor.
+--
+Para que servem os óculos verdes?
+— Para verde perto!
+--
+O que é um pontinho preto ao microscópio?
+— Uma blacktéria.
+--
+Para onde é que a papaia vai de férias?
+— Papaia!
+--
+Como é que as freiras secam a roupa?
+— Convento.
+--
+O que é que faz uma hortaliça surda?
+— Finge couve.
+--
+Diz a banana para a manga:
+Não ias comigo às compras?
+— Não, mas a melancia.
+--
+Porque é que o decorador foi ao médico?
+— Tinha um problema decoração.
+--
+Hoje encontrei uma minhoca no chão, mas estava a dormir.
+— Era uma dorminhoca.
+--
+Como é que se apanha um coelho?
+— Imita-se o som da cenoura.
+--
+Mamã, os meninos na escola chamam-me distraído!
+— Joãozinho, tu moras na casa em frente. Tens de ir lá dizer isso à tua mãe!
+--
+O que diz um boneco de neve para o outro?
+— Não te cheira a cenouras?
