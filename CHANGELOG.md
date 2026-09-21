@@ -4,6 +4,12 @@ Cada versão tem um cabeçalho `## versão — data` e uma lista de pontos. A ap
 aos administradores as entradas mais recentes do que a versão instalada quando procura
 atualizações.
 
+## 1.6.5 — 2026-09-21
+- Gerar a escala só a partir de um dia (botão ↻ em cada dia).
+- Escala separada em balcão, administrativo e extras.
+- Horário fixo para o backoffice.
+- Piadas do dia em português.
+
 ## 1.6.4 — 2026-09-20
 - Geração nova: nivela o balcão de segunda a sexta, escala só as «Pessoas ao sábado» e ao domingo apenas o plantão. Sem quotas por turno.
 - Bloquear células da escala para nada as alterar até serem desbloqueadas.
