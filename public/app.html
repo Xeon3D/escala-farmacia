@@ -1653,6 +1653,8 @@ function userMenuHTML() {
   </span>`;
 }
 function render() {
+  /* O menu da célula fica aberto enquanto escolhes opções: guarda-se a célula e reabre-se no fim. */
+  const menuKeep = menuCtx ? { id: menuCtx.id, d: menuCtx.d } : null;
   closeMenu();
   applyBranding();
   const st = $('#status');
@@ -1690,6 +1692,10 @@ function render() {
     : state.tab === 'utilizadores' ? renderUsers()
     : state.tab === 'definicoes' ? renderPrefs() : renderSettings();
   if (focusId && (focusId.startsWith('cfg-') || focusId.startsWith('pref-'))) { const f = document.getElementById(focusId); if (f) f.focus(); }
+  if (menuKeep && state.tab === 'horario' && !state.readOnly) {
+    const btn = $(`.cell[data-id="${CSS.escape(menuKeep.id)}"][data-d="${menuKeep.d}"]`);
+    if (btn) openMenu(btn);
+  }
 }
 
 /* ---------- Entrada e contas ---------- */
@@ -2964,24 +2970,23 @@ document.addEventListener('click', async ev => {
     case 'this-month': { const n = new Date(); state.month = `${n.getFullYear()}-${pad(n.getMonth() + 1)}`; render(); break; }
     case 'csv': downloadCSV(); break;
     case 'cell': if (menuCtx && menuCtx.btn === el) closeMenu(); else openMenu(el); break;
-    case 'pick': { const ctx = menuCtx; if (!ctx) break; closeMenu(); setShift(ctx.id, ctx.d, el.dataset.code); break; }
-    case 'lunch': { const ctx = menuCtx; if (!ctx) break; closeMenu(); setLunch(ctx.id, ctx.d, el.dataset.l); break; }
-    case 'lunch-len': { const ctx = menuCtx; if (!ctx) break; closeMenu(); setLunchLen(ctx.id, ctx.d, +el.dataset.v); break; }
+    case 'pick': { const ctx = menuCtx; if (!ctx) break; setShift(ctx.id, ctx.d, el.dataset.code); break; }
+    case 'lunch': { const ctx = menuCtx; if (!ctx) break; setLunch(ctx.id, ctx.d, el.dataset.l); break; }
+    case 'lunch-len': { const ctx = menuCtx; if (!ctx) break; setLunchLen(ctx.id, ctx.d, +el.dataset.v); break; }
     case 'duty-pay': {
-      const ctx = menuCtx; if (!ctx) break; closeMenu();
+      const ctx = menuCtx; if (!ctx) break;
       setDutyPay(ctx.id, ctx.d, el.dataset.pay);
       toast(el.dataset.pay === 'bank' ? 'As horas normais do plantão passam para o banco; as das 22h às 9h continuam pagas.' : 'As horas do plantão voltam a ser pagas.');
       break;
     }
     case 'post': {
-      const ctx = menuCtx; if (!ctx) break; closeMenu();
+      const ctx = menuCtx; if (!ctx) break;
       setPost(ctx.id, ctx.d, el.dataset.post);
       break;
     }
     case 'less': {
       const ctx = menuCtx; if (!ctx) break;
       const h = el.dataset.h === 'input' ? +($('#x-less')?.value || 0) : +el.dataset.h;
-      closeMenu();
       setLess(ctx.id, ctx.d, h);
       toast(h ? `Menos ${fmtH(h)} h neste turno.` : 'Horas do turno repostas.');
       break;
@@ -2992,27 +2997,26 @@ document.addEventListener('click', async ev => {
       const fromRaw = ($('#x-from')?.value || '').trim(), from = fromRaw ? normalizeTime(fromRaw) : '';
       if (!el.dataset.clear && !hrs) { toast('Indica quantas horas fez.'); $('#x-hrs')?.focus(); break; }
       if (fromRaw && !from) { toast('Escreve a hora de entrada no formato 24 horas.'); $('#x-from')?.focus(); break; }
-      closeMenu();
       setExtraHours(ctx.id, ctx.d, hrs, from);
       break;
     }
     case 'vacation': {
-      const ctx = menuCtx; if (!ctx) break; closeMenu();
+      const ctx = menuCtx; if (!ctx) break;
       setVacation(ctx.id, ctx.d, !!el.dataset.on);
       break;
     }
     case 'sick': {
-      const ctx = menuCtx; if (!ctx) break; closeMenu();
+      const ctx = menuCtx; if (!ctx) break;
       writeCell(ctx.id, ctx.d, el.dataset.on ? { sick: true } : null);
       break;
     }
     case 'xoff': {
-      const ctx = menuCtx; if (!ctx) break; closeMenu();
+      const ctx = menuCtx; if (!ctx) break;
       writeCell(ctx.id, ctx.d, el.dataset.on ? { xoff: true } : null);
       break;
     }
     case 'lock': {
-      const ctx = menuCtx; if (!ctx) break; closeMenu();
+      const ctx = menuCtx; if (!ctx) break;
       setLock(ctx.id, ctx.d, !!el.dataset.on);
       toast(el.dataset.on ? 'Célula bloqueada.' : 'Célula desbloqueada.');
       break;
@@ -3020,7 +3024,7 @@ document.addEventListener('click', async ev => {
     case 'vac-range': openVacation(el.dataset.id); break;
     case 'bank-report': openBankReport(el.dataset.id); break;
     case 'bank-off': {
-        const ctx = menuCtx; if (!ctx) break; closeMenu();
+      const ctx = menuCtx; if (!ctx) break;
       const h = +el.dataset.h;
       setBankOff(ctx.id, ctx.d, h);
       if (h) toast(h >= dayHours() ? `Folga paga com ${fmtH(h)} h do banco.` : `Descontadas ${fmtH(h)} h do banco.`);
