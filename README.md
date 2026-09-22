@@ -284,7 +284,8 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
   está em backoffice almoça sempre à mesma hora** (13:00 por omissão), com a duração
   mínima (12:00–13:00 por omissão).
   **Horários de 4 h ou menos não dão direito a almoço** — contam por inteiro, seja um turno
-  curto ou um turno cortado pelo horário de abertura.
+  curto, um turno cortado pelo horário de abertura ou um dia encurtado pelo ajuste de horas
+  (entrada às 09:00 com menos 4 h fica 09:00–13:00, direto).
 - **Horas nocturnas**: as horas entre as 22:00 e as 09:00 **não entram nas horas
   trabalhadas** — ficam à parte, na coluna «horas nocturnas», e pagam-se a dobrar. Na
   noite de serviço das 19:00 às 07:00 só as 3 h das 19:00 às 22:00 contam como

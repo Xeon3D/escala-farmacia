@@ -1204,15 +1204,28 @@ function getCell(wk, id, d) {
 function cellSpan(c) {
   if (!c?.sh) return null;
   const [s, e] = span(c.sh);
-  const adj = Math.round((+c.less || 0) * 60);
-  if (!adj) return [s, e];
+  if (!c.less) return [s, e];
+  const alvo = cellWork(c);                                // minutos de trabalho pretendidos
+  if (alvo <= LUNCH_MIN_SPAN) return [s, s + alvo];        // 4 h ou menos: faz direto, sem almoço
   const dur = c.sh.lunch && c.l ? lunchLen(c) : 0, l = dur ? toMin(c.l) : null;
-  const dentro = (fim) => (l !== null ? Math.max(0, Math.min(fim, l + dur) - Math.min(fim, l)) : 0);
-  const alvo = Math.max(0, (e - s) - dentro(e) - adj); // minutos de trabalho pretendidos
   if (l === null) return [s, Math.max(s, s + alvo)];
   if (alvo <= l - s) return [s, s + alvo];                 // sai antes do almoço
   return [s, Math.max(l, s + alvo + dur)];                 // sai depois do almoço
 }
+/** Minutos de trabalho da célula nesse dia: o turno, sem almoço e já com o ajuste do dia. */
+function cellWork(c) {
+  const [s, e] = span(c.sh);
+  const dur = c.sh.lunch && c.l ? lunchLen(c) : 0, l = dur ? toMin(c.l) : null;
+  const dentro = l !== null ? Math.max(0, Math.min(e, l + dur) - Math.min(e, l)) : 0;
+  return Math.max(0, (e - s) - dentro - Math.round((+c.less || 0) * 60));
+}
+/** Almoço mesmo feito nesse dia: quem, com o ajuste, fica com 4 h ou menos faz direto. */
+function cellLunch(c) {
+  if (!c?.sh?.lunch || !c.l) return 0;
+  return cellWork(c) > LUNCH_MIN_SPAN ? lunchLen(c) : 0;
+}
+/** Hora a que a pessoa almoça mesmo nesse dia, ou null se não almoça. */
+const cellLunchAt = c => (cellLunch(c) ? toMin(c.l) : null);
 /** Turno tal como é feito nesse dia (com o ajuste de horas aplicado). */
 function cellShift(c) {
   if (!c?.sh) return null;
@@ -1224,8 +1237,8 @@ function cellHours(c) {
   if (!c) return null;
   if (c.sh) {
     if (!c.less) return hoursOf(c.sh, c.l, lunchLen(c));
-    const [s, e] = cellSpan(c);
-    const h = hoursOf({ ...c.sh, start: fmtMin(s), end: fmtMin(e % 1440) }, c.l, lunchLen(c));
+    const [s, e] = cellSpan(c), dur = cellLunch(c);
+    const h = hoursOf({ ...c.sh, start: fmtMin(s), end: fmtMin(e % 1440), lunch: dur > 0 }, dur ? c.l : '', dur);
     return { ...h, less: Math.max(0, +c.less || 0), adj: +c.less || 0 };
   }
   if (c.hrs) {
@@ -1515,7 +1528,7 @@ function presence(wk, d, ids) {
   const ranges = [];
   for (const id of ids) {
     const c = getCell(wk, id, d), p = getCell(wk, id, d - 1);
-    if (c?.sh) { const [s, e] = cellSpan(c); ranges.push({ s, e, l: c.sh.lunch && c.l ? toMin(c.l) : null, ld: lunchLen(c), back: c.post === 'back', cr: counterRange(c) }); }
+    if (c?.sh) { const [s, e] = cellSpan(c); ranges.push({ s, e, l: cellLunchAt(c), ld: cellLunch(c), back: c.post === 'back', cr: counterRange(c) }); }
     else if (extraSpan(c)) { const [s, e] = extraSpan(c); ranges.push({ s, e, l: null, back: c.post === 'back', extra: true }); }
     if (p?.sh) { const [s, e] = cellSpan(p); if (e > 1440) ranges.push({ s: s - 1440, e: e - 1440, l: null, back: p.post === 'back' }); }
   }
@@ -1924,7 +1937,7 @@ function renderSchedule() {
       const c = getCell(wk, id, d), iss = cellIssues(e, id, wk, d, c), worst = worstOf(iss);
       iss.filter(i => i.lvl !== 'info').forEach(i => alerts.push({ lvl: i.lvl, who: e.name, when: `${DAYS[d]} ${days[d].getDate()}`, msg: i.msg }));
       const desc = c
-        ? (c.sh ? `${c.sh.name} ${cellShift(c).start}–${cellShift(c).end}${c.l ? `, almoço ${c.l}` : ''}${c.less ? `, ${c.less > 0 ? 'menos' : 'mais'} ${fmtH(Math.abs(c.less))} h` : ''}${c.pay === 'bank' ? ', horas para o banco' : ''}`
+        ? (c.sh ? `${c.sh.name} ${cellShift(c).start}–${cellShift(c).end}${cellLunch(c) ? `, almoço ${c.l}` : ''}${c.less ? `, ${c.less > 0 ? 'menos' : 'mais'} ${fmtH(Math.abs(c.less))} h` : ''}${c.pay === 'bank' ? ', horas para o banco' : ''}`
           : c.hrs ? `${fmtH(c.hrs)} h como extra${c.from ? ` a partir das ${c.from}` : ''}`
           : c.bank ? `desconto de ${fmtH(c.bank)} h do banco${isFullDayOff(c) ? ' (folga)' : ''}`
           : c.vac ? 'férias' : c.sick ? 'baixa médica' : c.xoff ? 'folga extra do plantão de fim de semana' : c.lock ? 'folga' : 'turno removido')
@@ -1936,7 +1949,7 @@ function renderSchedule() {
         /* Em cima as horas trabalhadas nesse dia; por baixo o horário mesmo feito (com o ajuste) e o almoço. */
         const h = cellHours(c), ef = cellShift(c);
         inner = `<b>${fmtH(h.normal)} h</b><span>${ef.start}–${ef.end}</span>` +
-          (c.sh.lunch ? `<span class="lu">${c.l ? 'alm. ' + c.l + (lunchLen(c) !== lunchMinLen() ? ` (${fmtDur(lunchLen(c))})` : '') : 'sem almoço'}</span>` : h.dbl ? `<span class="lu">+ ${fmtH(h.dbl)} h nocturnas</span>` : '');
+          (c.sh.lunch ? `<span class="lu">${cellLunch(c) ? 'alm. ' + c.l + (cellLunch(c) !== lunchMinLen() ? ` (${fmtDur(cellLunch(c))})` : '') : 'sem almoço'}</span>` : h.dbl ? `<span class="lu">+ ${fmtH(h.dbl)} h nocturnas</span>` : '');
       } else if (c?.vac) {
         tone = 'tone-vac';
         inner = '<b>Férias</b>';
@@ -2155,7 +2168,7 @@ function renderCounter() {
       if (!c || c.sh?.night) continue;
       const sp = c.sh ? cellSpan(c) : extraSpan(c);
       if (!sp || sp[0] >= t + 60 || sp[1] <= t) continue;
-      const l = c.sh?.lunch && c.l ? toMin(c.l) : null, lm = lunchLen(c);
+      const l = c.sh ? cellLunchAt(c) : null, lm = c.sh ? cellLunch(c) : 0;
       const lunchAll = l !== null && l <= t && l + lm >= t + 60;          // almoço ocupa a hora toda
       const lunchPart = l !== null && !lunchAll && l < t + 60 && l + lm > t; // almoço apanha parte da hora
       const cr = counterRange(c);
