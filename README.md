@@ -58,6 +58,10 @@ docker exec -it escala-farmacia python server.py --reset-admin o-teu-utilizador
 
 O separador **Definições** junta o que diz respeito à instalação e não à escala:
 
+- **Escala**: mostrar ou esconder as linhas de contagem no fundo da escala (pessoas por
+  turno, backoffice, férias, baixas e folgas extra).
+- **Feriados**: ver acima.
+
 - **Aparência**: título, subtítulo e logótipo mostrados no cabeçalho e no separador do
   navegador. O logótipo (PNG, JPG, WebP ou SVG) é reduzido para 128 px e fica guardado na
   base de dados. Sem subtítulo, o cabeçalho mostra a **frase do dia**, tirada de
@@ -212,6 +216,10 @@ exportação e importação em JSON.
   célula). Quem é de backoffice **pode ir para o balcão** quando for preciso, bastando
   mudar o posto. O gráfico de presença e o mínimo ao balcão só contam quem está ao
   balcão; o backoffice aparece numa linha própria e não trabalha ao fim de semana.
+  Ao pôr uma pessoa de backoffice **ao balcão** podes escolher o período em que lá está
+  (das __ às __); no gráfico «Ao balcão» essas meias horas ficam a **laranja**, o
+  backoffice que só *pode* ir aparece a **amarelo** por cima da barra e as horas de
+  **extras** a azul claro.
 - **Backoffice por defeito**: na ficha, marca quem trabalha sempre em backoffice. Os
   turnos dessa pessoa entram logo nesse posto e ela não é escalada ao fim de semana.
   Quem está marcado como backoffice faz **sempre o horário de backoffice** (a geração não

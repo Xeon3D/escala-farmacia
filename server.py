@@ -58,6 +58,8 @@ DEFAULT_SETTINGS = {
     "lunchMax": 120,
     # Quem está em backoffice almoça sempre a esta hora, com a duração mínima.
     "backLunchAt": "12:00",
+    # Mostrar as linhas de contagem no fundo da escala.
+    "showCounts": True,
     # Feriados: nacionais, o municipal da localidade e os acrescentados à mão.
     "holidays": True,
     "town": "",
@@ -154,6 +156,8 @@ CREATE TABLE IF NOT EXISTS assignments (
   less     REAL NOT NULL DEFAULT 0,
   locked   INTEGER NOT NULL DEFAULT 0,
   lunch_dur INTEGER NOT NULL DEFAULT 0,
+  c_from   TEXT NOT NULL DEFAULT '',
+  c_to     TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (week, day, emp_id),
   FOREIGN KEY (emp_id) REFERENCES employees(id) ON DELETE CASCADE
 );
@@ -208,7 +212,8 @@ def migrate() -> None:
                         "post": "TEXT NOT NULL DEFAULT ''", "kind": "TEXT NOT NULL DEFAULT ''",
                         "hrs": "REAL NOT NULL DEFAULT 0", "start": "TEXT NOT NULL DEFAULT ''",
                         "less": "REAL NOT NULL DEFAULT 0", "locked": "INTEGER NOT NULL DEFAULT 0",
-                        "lunch_dur": "INTEGER NOT NULL DEFAULT 0"},
+                        "lunch_dur": "INTEGER NOT NULL DEFAULT 0",
+                        "c_from": "TEXT NOT NULL DEFAULT ''", "c_to": "TEXT NOT NULL DEFAULT ''"},
         "users": {"avatar": "TEXT NOT NULL DEFAULT ''"},
         "shifts": {"saturday": "INTEGER", "back": "INTEGER NOT NULL DEFAULT 0"},
     }
@@ -809,6 +814,9 @@ def read_state() -> dict:
                 cell["lock"] = True
             if r["lunch_dur"]:
                 cell["ld"] = r["lunch_dur"]
+            if r["c_from"] and r["c_to"]:
+                cell["cf"] = r["c_from"]
+                cell["ct"] = r["c_to"]
             if cell:
                 week["cells"].setdefault(r["emp_id"], {})[str(r["day"])] = cell
     config = dict(settings)
@@ -862,6 +870,7 @@ def save_week(week: str, cells: dict) -> None:
             if not 0 <= d <= 6 or not cell:
                 continue
             hrs, start, less, locked, ldur = 0.0, "", 0.0, 0, 0
+            cfrom, cto = "", ""
             if isinstance(cell, str):
                 sid, lunch, pay, bank, post, kind = cell, "", "", 0.0, "", ""
             else:
@@ -887,14 +896,17 @@ def save_week(week: str, cells: dict) -> None:
                     ldur = max(0, min(480, int(cell.get("ld") or 0)))
                 except (TypeError, ValueError):
                     ldur = 0
+                if post == "back":
+                    cfrom = str(cell.get("cf") or "")[:5]
+                    cto = str(cell.get("ct") or "")[:5]
             if not sid and not bank and not kind and not hrs and not locked:
                 continue
-            rows.append((week, d, str(emp_id), sid, lunch, pay, bank, post, kind, hrs, start, less, locked, ldur))
+            rows.append((week, d, str(emp_id), sid, lunch, pay, bank, post, kind, hrs, start, less, locked, ldur, cfrom, cto))
     with lock:
         conn.execute("DELETE FROM assignments WHERE week=?", (week,))
         conn.executemany(
-            "INSERT OR REPLACE INTO assignments (week,day,emp_id,shift_id,lunch,pay,bank_hours,post,kind,hrs,start,less,locked,lunch_dur)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows
+            "INSERT OR REPLACE INTO assignments (week,day,emp_id,shift_id,lunch,pay,bank_hours,post,kind,hrs,start,less,locked,lunch_dur,c_from,c_to)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows
         )
         conn.commit()
 

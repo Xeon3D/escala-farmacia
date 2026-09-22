@@ -16,6 +16,7 @@
   --vac-bg:#EDE7DC; --vac-ink:#6B4F1D; --vac-dot:#B08A3E;
   --sick-bg:#F3E3E6; --sick-ink:#7A2E3C; --sick-dot:#B85468;
   --hol-bg:#EAE4F7; --hol-ink:#4B3A7A;
+  --bo-pot:#E8C547; --bo-at:#E2892B; --extra-c:#7FC7E8;
   --off-dot:#B9C6C2;
   --bad:#B42318; --bad-bg:#FDE7E4; --warn:#A64B06; --warn-bg:#FEF1DC; --ok:#17804A; --ok-bg:#DEF3E6;
   --weekend:#EAF1EE; --duty:#F3ECFB; --overlay:rgba(12,22,19,.45);
@@ -38,6 +39,7 @@
     --vac-bg:#2E2617; --vac-ink:#DCC08A; --vac-dot:#C09B52;
     --sick-bg:#33191F; --sick-ink:#E5A3B1; --sick-dot:#C46A7C;
     --hol-bg:#241C3A; --hol-ink:#C3B4EA;
+    --bo-pot:#D9B63C; --bo-at:#D2801F; --extra-c:#5FA8CC;
     --off-dot:#4A5A55;
     --bad:#F58B80; --bad-bg:#3A1714; --warn:#F5B266; --warn-bg:#3A260E; --ok:#62D896; --ok-bg:#12301F;
     --weekend:#18231F; --duty:#211E33; --overlay:rgba(0,0,0,.6);
@@ -135,6 +137,7 @@ table.counter{border-collapse:separate;border-spacing:0;width:100%;min-width:900
 .counter .who span i{width:8px;height:8px;border-radius:50%;flex:none}
 .counter .who span.lunch{opacity:.55;text-decoration:line-through}
 .counter .who span.back{border:1px dashed var(--line);background:transparent;color:var(--ink-2)}
+.counter .who span.ajuda{border:1px solid var(--bo-at);background:color-mix(in srgb,var(--bo-at) 18%,transparent)}
 .counter .cnt{font:600 11px var(--mono);color:var(--ink-3);margin-top:4px}
 .counter .cnt.bad{color:var(--bad)}
 table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:980px}
@@ -243,7 +246,10 @@ td.tot.over b,td.tot.over span{color:var(--warn)}
 .pres{display:flex;align-items:flex-end;gap:1px;height:30px;padding-inline:2px}
 .pres i{flex:1;background:var(--accent);opacity:.5;border-radius:1px 1px 0 0;min-height:2px}
 .pres i.low{background:var(--bad);opacity:1}
-.pres i u{display:block;background:var(--ink-3);opacity:.55;border-radius:1px 1px 0 0}
+.pres i{position:relative}
+.pres i u{position:absolute;left:0;right:0;bottom:100%;display:block;background:var(--bo-pot);opacity:.8;border-radius:1px 1px 0 0}
+.pres i b{position:absolute;left:0;right:0;bottom:0;display:block;background:var(--bo-at);border-radius:0}
+.pres i s{position:absolute;left:0;right:0;display:block;background:var(--extra-c);border-radius:0}
 .pres-axis{display:flex;justify-content:space-between;font:9.5px var(--mono);color:var(--ink-3);padding-inline:2px;margin-top:2px}
 
 .below{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px;margin-top:22px}
@@ -684,6 +690,8 @@ const DEFAULT_CONFIG = {
   /* Aparência: título, subtítulo e logótipo (data URL) mostrados no cabeçalho. */
   siteTitle: 'Escala da Farmácia', siteTagline: '', siteLogo: '',
   updateCheck: 'week',
+  /* Mostrar (ou não) as linhas de contagem por turno no fundo da escala. */
+  showCounts: true,
   /* Sábado: quantas pessoas são precisas (a farmácia só abre de manhã). */
   saturdayPeople: 2,
   /* A noite de serviço ao fim de semana começa mais cedo do que nos dias úteis. */
@@ -1170,13 +1178,15 @@ function getCell(wk, id, d) {
   if (d > 6) { wk = shiftWeek(wk, 1); d -= 7; }
   const raw = state.schedules[wk]?.cells?.[id]?.[d];
   if (!raw) return null;
-  if (typeof raw === 'string') return raw ? { s: raw, sh: shiftOn(shiftById(raw), d, wk), l: '', ld: 0, pay: '', bank: 0, post: '', vac: false, sick: false, xoff: false, lock: false, hrs: 0, from: '', less: 0 } : null;
+  if (typeof raw === 'string') return raw ? { s: raw, sh: shiftOn(shiftById(raw), d, wk), l: '', ld: 0, pay: '', bank: 0, post: '', vac: false, sick: false, xoff: false, lock: false, hrs: 0, from: '', less: 0, cf: '', ct: '' } : null;
   const s = raw.s || '', bank = +raw.bank || 0, vac = !!raw.vac, sick = !vac && !!raw.sick, xoff = !vac && !sick && !!raw.xoff, hrs = s ? 0 : Math.max(0, +raw.hrs || 0);
   const lock = !!raw.lock; // bloqueada: nada a altera até ser desbloqueada (pode ser uma folga bloqueada)
   const ld = Math.max(0, +raw.ld || 0); // duração do almoço; 0 = a duração mínima
   if (!s && !bank && !vac && !sick && !xoff && !hrs && !lock) return null;
   return {
     s, sh: s ? shiftOn(shiftById(s), d, wk) : null, l: raw.l || '', ld, bank, vac, sick, xoff, lock,
+    /* Quem está em backoffice pode ir ao balcão só num período do dia. */
+    cf: validTime(raw.cf) ? raw.cf : '', ct: validTime(raw.ct) ? raw.ct : '',
     pay: raw.pay === 'bank' ? 'bank' : '', post: raw.post === 'back' ? 'back' : '',
     /* Extras: horas feitas nesse dia e, se souberes, a hora a que entrou. Turnos: horas a menos (chegou tarde / saiu cedo). */
     /* «less» é o ajuste do dia: positivo = horas a menos, negativo = horas a mais. */
@@ -1500,15 +1510,18 @@ function presence(wk, d, ids) {
   const ranges = [];
   for (const id of ids) {
     const c = getCell(wk, id, d), p = getCell(wk, id, d - 1);
-    if (c?.sh) { const [s, e] = cellSpan(c); ranges.push({ s, e, l: c.sh.lunch && c.l ? toMin(c.l) : null, ld: lunchLen(c), back: c.post === 'back' }); }
-    else if (extraSpan(c)) { const [s, e] = extraSpan(c); ranges.push({ s, e, l: null, back: c.post === 'back' }); }
+    if (c?.sh) { const [s, e] = cellSpan(c); ranges.push({ s, e, l: c.sh.lunch && c.l ? toMin(c.l) : null, ld: lunchLen(c), back: c.post === 'back', cr: counterRange(c) }); }
+    else if (extraSpan(c)) { const [s, e] = extraSpan(c); ranges.push({ s, e, l: null, back: c.post === 'back', extra: true }); }
     if (p?.sh) { const [s, e] = cellSpan(p); if (e > 1440) ranges.push({ s: s - 1440, e: e - 1440, l: null, back: p.post === 'back' }); }
   }
   const presentes = t => ranges.filter(r => r.s <= t && t < r.e && !(r.l !== null && r.l <= t && t < r.l + (r.ld || lunchMinLen())));
   const slots = [];
   for (let t = from; t < to; t += 30) {
     const aqui = presentes(t);
-    slots.push({ t, n: aqui.filter(r => !r.back).length, back: aqui.filter(r => r.back).length, min: minFor(d, t, wk) });
+    /* «bc» é quem, sendo de backoffice, está ao balcão nesta meia hora; «back» é quem lá pode ir. */
+    const bc = aqui.filter(r => r.back && atCounter(r, t)).length;
+    const ex = aqui.filter(r => r.extra && atCounter(r, t)).length;
+    slots.push({ t, n: aqui.filter(r => atCounter(r, t)).length, bc, ex, back: aqui.filter(r => r.back && !atCounter(r, t)).length, min: minFor(d, t, wk) });
   }
   return { from, to, slots };
 }
@@ -1941,7 +1954,7 @@ function renderSchedule() {
         ? `<button class="adj minus" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="0.5" title="Meia hora a menos (sai mais cedo)" tabindex="-1">−</button>`
           + `<button class="adj plus" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="-0.5" title="Meia hora a mais (sai mais tarde)" tabindex="-1">+</button>`
         : '';
-      tds += `<td class="cellbox ${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''} ${holidayOn(iso(days[d])) ? 'holiday' : ''}">${ajust}<button class="cell ${tone} ${c?.lock ? 'locked' : ''} ${worst && worst !== 'info' ? 'has-' + worst : ''}" data-action="cell" data-id="${esc(id)}" data-d="${d}" title="${esc(label)}" aria-label="${esc(label)}" aria-haspopup="menu" ${state.readOnly ? 'disabled' : ''}>${inner}${e.fixed?.[d] ? '<i class="pin">fixo</i>' : ''}${c?.pay === 'bank' ? '<i class="pin bankpin">banco</i>' : ''}${isBackoffice(c) ? '<i class="pin backpin">back</i>' : ''}${c?.less ? `<i class="pin lesspin">${c.less > 0 ? '−' : '+'}${fmtH(Math.abs(c.less))}h</i>` : ''}${c?.lock ? '<i class="pin lockpin" title="Bloqueada">🔒</i>' : ''}${worst === 'bad' || worst === 'warn' ? '<i class="flag"></i>' : ''}</button></td>`;
+      tds += `<td class="cellbox ${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''} ${holidayOn(iso(days[d])) ? 'holiday' : ''}">${ajust}<button class="cell ${tone} ${c?.lock ? 'locked' : ''} ${worst && worst !== 'info' ? 'has-' + worst : ''}" data-action="cell" data-id="${esc(id)}" data-d="${d}" title="${esc(label)}" aria-label="${esc(label)}" aria-haspopup="menu" ${state.readOnly ? 'disabled' : ''}>${inner}${e.fixed?.[d] ? '<i class="pin">fixo</i>' : ''}${c?.pay === 'bank' ? '<i class="pin bankpin">banco</i>' : ''}${isBackoffice(c) ? `<i class="pin backpin" title="${counterRange(c) ? `Ao balcão das ${c.cf} às ${c.ct}` : 'Backoffice'}">${counterRange(c) ? 'bal.' : 'back'}</i>` : ''}${c?.less ? `<i class="pin lesspin">${c.less > 0 ? '−' : '+'}${fmtH(Math.abs(c.less))}h</i>` : ''}${c?.lock ? '<i class="pin lockpin" title="Bloqueada">🔒</i>' : ''}${worst === 'bad' || worst === 'warn' ? '<i class="flag"></i>' : ''}</button></td>`;
     }
     const over = false;
     if (st.xoffOwed) alerts.push({ lvl: 'warn', who: e.name, when: 'Semana', msg: `Tem direito a ${st.xoffOwed === 1 ? 'uma folga extra' : st.xoffOwed + ' folgas extra'} pela noite de plantão ao fim de semana — ainda não está marcada` });
@@ -1965,6 +1978,7 @@ function renderSchedule() {
   }
 
   let foot = '', filled = 0;
+  const verContagens = cfg().showCounts !== false;
   for (const sh of sortedShifts()) {
     let tds = '';
     for (let d = 0; d < 7; d++) {
@@ -1973,7 +1987,7 @@ function renderSchedule() {
       if (have < req) alerts.push({ lvl: 'bad', who: 'Cobertura', when: `${DAYS[d]} ${days[d].getDate()}`, msg: `${sh.name} (${sh.start}): ${have} de ${req} ${req === 1 ? 'pessoa necessária' : 'pessoas necessárias'}` });
       tds += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}">${req || have ? `<span class="cov ${have < req ? 'short' : 'ok'}" title="${have} ${have === 1 ? 'pessoa' : 'pessoas'}${req ? `, ${req} necessária` : ''}">${req ? `${have}/${req}` : have}</span>` : '<span class="cov none">—</span>'}</td>`;
     }
-    foot += `<tr><th scope="row"><span class="dot ${toneOf(sh)}"></span>${esc(sh.name)}<small>${sh.start}–${sh.end}${sh.onlyDuty ? ' · só no plantão' : ''}</small></th>${tds}<td class="tot"></td></tr>`;
+    if (verContagens) foot += `<tr><th scope="row"><span class="dot ${toneOf(sh)}"></span>${esc(sh.name)}<small>${sh.start}–${sh.end}${sh.onlyDuty ? ' · só no plantão' : ''}</small></th>${tds}<td class="tot"></td></tr>`;
   }
   /* Fim de semana: cada dia aberto precisa do número de pessoas previsto. */
   for (const d of [5, 6]) {
@@ -2007,7 +2021,12 @@ function renderSchedule() {
       } else flush();
     });
     flush();
-    const bars = p.slots.map(s => `<i class="${s.n < s.min ? 'low' : ''}" style="height:${Math.max(2, Math.round(s.n / maxN * 28))}px" title="${fmtMin(s.t)}: ${s.n} ao balcão (mínimo ${s.min})${s.back ? ` + ${s.back} em backoffice` : ''}"><u style="height:${Math.round(s.back / maxN * 28)}px"></u></i>`).join('');
+    const bars = p.slots.map(s => {
+      const alt = n => Math.round(n / maxN * 28);
+      const titulo = `${fmtMin(s.t)}: ${s.n} ao balcão (mínimo ${s.min})${s.bc ? ` — ${s.bc} de backoffice` : ''}${s.ex ? ` — ${s.ex} extra` : ''}${s.back ? ` · ${s.back} em backoffice que pode ir ao balcão` : ''}`;
+      return `<i class="${s.n < s.min ? 'low' : ''}" style="height:${Math.max(2, alt(s.n))}px" title="${esc(titulo)}">`
+        + `${s.bc ? `<b style="height:${alt(s.bc)}px"></b>` : ''}${s.ex ? `<s style="height:${alt(s.ex)}px;bottom:${alt(s.bc)}px"></s>` : ''}${s.back ? `<u style="height:${alt(s.back)}px"></u>` : ''}</i>`;
+    }).join('');
     presRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''}"><div class="pres" role="img" aria-label="Pessoas ao balcão entre ${fmtMin(p.from)} e ${fmtMin(p.to)}">${bars}</div><div class="pres-axis"><span>${fmtMin(p.from).slice(0, 2)}h</span><span>${fmtMin(p.to).slice(0, 2)}h</span></div></td>`;
   });
   const bandsTxt = (C.presenceBands || []).filter(b => validTime(b.from) && validTime(b.to)).map(b => `${b.from}–${b.to} ${+b.min || 0}`).join(', ');
@@ -2019,7 +2038,7 @@ function renderSchedule() {
     backTotal += n;
     backRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}">${n ? `<span class="cov ok">${n}</span>` : '<span class="cov none">—</span>'}</td>`;
   }
-  if (backTotal) foot += `<tr><th scope="row">Backoffice<small>não conta para o balcão</small></th>${backRow}<td class="tot"></td></tr>`;
+  if (backTotal && verContagens) foot += `<tr><th scope="row">Backoffice<small>não conta para o balcão</small></th>${backRow}<td class="tot"></td></tr>`;
 
   let vacRow = '';
   let vacTotal = 0;
@@ -2028,21 +2047,21 @@ function renderSchedule() {
     vacTotal += n;
     vacRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''}">${n ? `<span class="cov extra">${n}</span>` : '<span class="cov none">—</span>'}</td>`;
   }
-  if (vacTotal) foot += `<tr><th scope="row"><span class="dot tone-vac"></span>De férias</th>${vacRow}<td class="tot"></td></tr>`;
+  if (vacTotal && verContagens) foot += `<tr><th scope="row"><span class="dot tone-vac"></span>De férias</th>${vacRow}<td class="tot"></td></tr>`;
   let sickRow = '', sickTotal = 0;
   for (let d = 0; d < 7; d++) {
     const n = ids.filter(id => getCell(wk, id, d)?.sick).length;
     sickTotal += n;
     sickRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''}">${n ? `<span class="cov extra">${n}</span>` : '<span class="cov none">—</span>'}</td>`;
   }
-  if (sickTotal) foot += `<tr><th scope="row"><span class="dot tone-sick"></span>De baixa</th>${sickRow}<td class="tot"></td></tr>`;
+  if (sickTotal && verContagens) foot += `<tr><th scope="row"><span class="dot tone-sick"></span>De baixa</th>${sickRow}<td class="tot"></td></tr>`;
   let xoffRow = '', xoffTotal = 0;
   for (let d = 0; d < 7; d++) {
     const n = ids.filter(id => getCell(wk, id, d)?.xoff).length;
     xoffTotal += n;
     xoffRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''}">${n ? `<span class="cov extra">${n}</span>` : '<span class="cov none">—</span>'}</td>`;
   }
-  if (xoffTotal) foot += `<tr><th scope="row"><span class="dot tone-xoff"></span>Folga extra do plantão</th>${xoffRow}<td class="tot"></td></tr>`;
+  if (xoffTotal && verContagens) foot += `<tr><th scope="row"><span class="dot tone-xoff"></span>Folga extra do plantão</th>${xoffRow}<td class="tot"></td></tr>`;
 
   const bad = alerts.filter(a => a.lvl === 'bad').length, warn = alerts.length - bad;
   alerts.sort((a, b) => (a.lvl === b.lvl ? 0 : a.lvl === 'bad' ? -1 : 1));
@@ -2079,7 +2098,7 @@ function renderSchedule() {
     <span><b style="color:${bad ? 'var(--bad)' : 'var(--ok)'}">${bad}</b>conflitos</span>
     <span><b style="color:${warn ? 'var(--warn)' : 'var(--ink)'}">${warn}</b>avisos</span>
     <span class="sep"></span>
-    <span class="legend">${sortedShifts().map(s => `<span><i class="dot ${toneOf(s)}"></i>${esc(s.name)} <code>${s.start}–${s.end}</code></span>`).join('')}<span><i class="dot tone-off"></i>Almoço <code>${C.lunchFrom}–${C.lunchTo}</code></span><span><i class="dot tone-bank"></i>Folga do banco</span>${ids.some(id => state.employees[id].extra) ? '<span><i class="dot tone-extra"></i>Horas de extra</span>' : ''}</span>
+    <span class="legend">${sortedShifts().map(s => `<span><i class="dot ${toneOf(s)}"></i>${esc(s.name)} <code>${s.start}–${s.end}</code></span>`).join('')}<span><i class="dot tone-off"></i>Almoço <code>${C.lunchFrom}–${C.lunchTo}</code></span><span><i class="dot tone-bank"></i>Folga do banco</span><span><i class="dot" style="background:var(--bo-pot)"></i>Backoffice que pode ir ao balcão</span><span><i class="dot" style="background:var(--bo-at)"></i>Backoffice ao balcão</span><span><i class="dot" style="background:var(--extra-c)"></i>Extra</span>${ids.some(id => state.employees[id].extra) ? '<span><i class="dot tone-extra"></i>Horas de extra</span>' : ''}</span>
   </div>
   <div class="grid-wrap">
     <table class="grid">
@@ -2133,7 +2152,10 @@ function renderCounter() {
       const l = c.sh?.lunch && c.l ? toMin(c.l) : null, lm = lunchLen(c);
       const lunchAll = l !== null && l <= t && l + lm >= t + 60;          // almoço ocupa a hora toda
       const lunchPart = l !== null && !lunchAll && l < t + 60 && l + lm > t; // almoço apanha parte da hora
-      out.push({ id, e: state.employees[id], back: c.post === 'back', lunchAll, lunchPart, l, lm });
+      const cr = counterRange(c);
+      /* Quem é de backoffice conta como balcão dentro do seu período. */
+      const noBalcao = cr && cr[0] < t + 60 && t < cr[1];
+      out.push({ id, e: state.employees[id], back: c.post === 'back' && !noBalcao, ajuda: !!noBalcao, lunchAll, lunchPart, l, lm });
     }
     return out;
   };
@@ -2147,7 +2169,7 @@ function renderCounter() {
       const atCounter = ps.filter(p => !p.back && !p.lunchAll).length;
       const min = Math.min(minFor(d, t, wk), minFor(d, t + 30, wk));
       const chips = ps.sort((a, b) => (a.back - b.back) || a.e.name.localeCompare(b.e.name, 'pt')).map(p =>
-        `<span class="${p.back ? 'back' : ''} ${p.lunchAll ? 'lunch' : ''}" title="${esc(p.e.name)}${p.back ? ' · backoffice' : ''}${p.l !== null ? ` · almoço ${fmtMin(p.l)}–${fmtMin(p.l + p.lm)}` : ''}"><i style="background:${esc(p.e.color || COLORS[0])}"></i>${esc(p.e.name.split(' ')[0])}${p.lunchPart ? ' <small>🍴</small>' : ''}${p.back ? ' <small>back</small>' : ''}</span>`).join('');
+        `<span class="${p.back ? 'back' : ''} ${p.ajuda ? 'ajuda' : ''} ${p.lunchAll ? 'lunch' : ''}" title="${esc(p.e.name)}${p.back ? ' · backoffice' : p.ajuda ? ' · backoffice a ajudar ao balcão' : ''}${p.l !== null ? ` · almoço ${fmtMin(p.l)}–${fmtMin(p.l + p.lm)}` : ''}"><i style="background:${esc(p.e.color || COLORS[0])}"></i>${esc(p.e.name.split(' ')[0])}${p.lunchPart ? ' <small>🍴</small>' : ''}${p.back ? ' <small>back</small>' : ''}${p.ajuda ? ' <small>bal.</small>' : ''}</span>`).join('');
       const low = atCounter < min;
       tds += `<td class="${low ? (ps.some(p => p.back) ? 'warnlow' : 'low') : ''} ${d === duty ? 'duty' : ''}"><div class="who">${chips || '<span style="color:var(--bad)">ninguém</span>'}</div><div class="cnt ${low ? 'bad' : ''}">${atCounter} ao balcão · mín. ${min}</div></td>`;
     }
@@ -2513,6 +2535,12 @@ function renderPrefs() {
     </div>
   </section>
   <section class="panel">
+    <h3>Escala</h3>
+    <div class="rules-form">
+      <div class="field-inline"><label class="toggle" for="pref-counts" style="padding:0;border:0;background:none"><span><b>Contagens no fundo da escala</b><small>As linhas com o número de pessoas por turno, backoffice, férias, baixas e folgas extra</small></span><input type="checkbox" class="switch" id="pref-counts" data-hol="showCounts" ${C.showCounts === false ? '' : 'checked'} ${ro}></label></div>
+    </div>
+  </section>
+  <section class="panel">
     <h3>Feriados</h3>
     <p>Os feriados nacionais (incluindo os que mudam com a Páscoa) são marcados na escala. Indica a localidade para juntar o feriado municipal — confirma sempre a data, que varia de concelho para concelho.</p>
     <div class="rules-form">
@@ -2705,10 +2733,24 @@ function openMenu(btn) {
   /* Quem é do balcão nunca vai para backoffice; por isso a secção só aparece a quem é de backoffice. */
   let postPick = '';
   if (worksOn(cur) && (e.backoffice || cur.post === 'back')) {
+    const cr = counterRange(cur), noBalcao = cur.post !== 'back' || !!cr;
+    let horas = '';
+    if (noBalcao && cur.sh) {
+      /* Ao balcão só num período do dia: em branco = o turno todo. */
+      const [ts, te] = cellSpan(cur);
+      const opc = [];
+      for (let t = Math.ceil(ts / 30) * 30; t <= te; t += 30) opc.push(t);
+      const sel = (nome, valor, lista) => `<select id="${nome}" data-bc="1"><option value="">turno todo</option>${lista.map(t => `<option value="${fmtMin(t % 1440)}" ${valor === fmtMin(t % 1440) ? 'selected' : ''}>${fmtMin(t % 1440)}</option>`).join('')}</select>`;
+      horas = `<div class="lunch-pick"><p>Ao balcão${cr ? ` das ${cur.cf} às ${cur.ct}` : ' o turno todo'}</p><div style="align-items:center;gap:6px">
+        <span style="font-size:12px;color:var(--ink-3)">das</span>${sel('bc-from', cur.cf, opc.slice(0, -1))}
+        <span style="font-size:12px;color:var(--ink-3)">às</span>${sel('bc-to', cur.ct, opc.slice(1))}
+        ${cr ? '<button class="lchip" data-action="bc-clear">Turno todo</button>' : ''}
+      </div></div>`;
+    }
     postPick = `<div class="lunch-pick"><p>Posto</p><div>
-      <button class="lchip ${cur.post === 'back' ? '' : 'cur'}" data-action="post" data-post="">Balcão</button>
-      <button class="lchip ${cur.post === 'back' ? 'cur' : ''}" data-action="post" data-post="back">Backoffice</button>
-    </div></div>`;
+      <button class="lchip ${noBalcao ? 'cur' : ''}" data-action="post" data-post="">Balcão</button>
+      <button class="lchip ${noBalcao ? '' : 'cur'}" data-action="post" data-post="back">Backoffice</button>
+    </div></div>${horas}`;
   }
   menu.innerHTML = cur?.lock
     ? `${head}<div class="locknote">🔒 Bloqueada — carrega no cadeado para alterar.</div>`
@@ -2790,8 +2832,17 @@ function cellRaw(c) {
   else if (c.bank) { v.bank = c.bank; return v; }
   else return c.lock ? v : null;
   if (c.post) v.post = c.post;
+  if (c.post === 'back' && c.cf && c.ct) { v.cf = c.cf; v.ct = c.ct; }
   return v;
 }
+/** Período em que quem está em backoffice vai ao balcão (minutos), se estiver marcado. */
+function counterRange(c) {
+  if (!c || c.post !== 'back' || !c.cf || !c.ct) return null;
+  const a = toMin(c.cf); let b = toMin(c.ct); if (b <= a) b += 1440;
+  return [a, b];
+}
+/** A pessoa está ao balcão neste instante? (quem é do balcão está sempre; o backoffice só no seu período) */
+const atCounter = (r, t) => !r.back || (r.cr && r.cr[0] <= t && t < r.cr[1]);
 const isLocked = (wk, id, d) => !!getCell(wk, id, d)?.lock;
 const cellBase = cur => worksOn(cur) ? cellRaw(cur) : null;
 /** Horas avulsas de um extra nesse dia (0 retira). */
@@ -2829,6 +2880,20 @@ function setPost(id, d, post) {
   if (!worksOn(cur)) return;
   const v = cellBase(cur);
   if (post) v.post = post; else delete v.post;
+  delete v.cf; delete v.ct;   // mudar de posto limpa o período ao balcão
+  writeCell(id, d, v);
+}
+/** Período em que quem é de backoffice está ao balcão; sem período fica ao balcão o turno todo. */
+function setCounterRange(id, d, from, to) {
+  const cur = getCell(state.week, id, d);
+  if (!cur?.sh) return;
+  const v = cellBase(cur);
+  const [ts, te] = cellSpan(cur);
+  /* Se só escolheres um dos lados, o outro é o início ou o fim do turno. */
+  if (from || to) {
+    const a = from ? toMin(from) : ts, b2 = to ? toMin(to) : te;
+    if (b2 > a) { v.post = 'back'; v.cf = fmtMin(a % 1440); v.ct = fmtMin(b2 % 1440); }
+  } else { delete v.cf; delete v.ct; delete v.post; }
   writeCell(id, d, v);
 }
 /** Bloqueia ou desbloqueia a célula (mantendo o que lá está; uma folga bloqueada fica {lock:true}). */
@@ -3054,7 +3119,7 @@ document.addEventListener('click', async ev => {
   if (!el) { if (!ev.target.closest('#menu')) closeMenu(); return; }
   const a = el.dataset.action;
   if (['my-avatar', 'my-password', 'logout'].includes(a)) state.userMenuOpen = false;
-  if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation', 'sick', 'xoff', 'lock', 'less', 'adj', 'extra-hours', 'lunch-len'].includes(a)) closeMenu();
+  if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation', 'sick', 'xoff', 'lock', 'less', 'adj', 'extra-hours', 'lunch-len', 'bc-clear'].includes(a)) closeMenu();
   switch (a) {
     case 'tab': state.tab = el.dataset.tab; ls.set('escala.tab', state.tab); render(); window.scrollTo(0, 0); break;
     case 'logout':
@@ -3162,6 +3227,7 @@ document.addEventListener('click', async ev => {
     }
     case 'vac-range': openVacation(el.dataset.id); break;
     case 'bank-report': openBankReport(el.dataset.id); break;
+    case 'bc-clear': { const ctx = menuCtx; if (!ctx) break; setCounterRange(ctx.id, ctx.d, '', ''); break; }
     case 'bank-off': {
       const ctx = menuCtx; if (!ctx) break;
       const h = +el.dataset.h;
@@ -3555,9 +3621,15 @@ document.addEventListener('input', ev => {
 });
 document.addEventListener('change', async ev => {
   const t = ev.target;
+  if (t.dataset?.bc) {
+    const ctx = menuCtx; if (!ctx) return;
+    setCounterRange(ctx.id, ctx.d, $('#bc-from')?.value || '', $('#bc-to')?.value || '');
+    return;
+  }
   if (t.dataset?.hol) {
     const c = { ...cfg() }, k = t.dataset.hol;
     if (k === 'holidays') c.holidays = t.checked;
+    else if (k === 'showCounts') c.showCounts = t.checked;
     else if (k === 'town') {
       c.town = t.value.trim().slice(0, 60);
       const conhecido = TOWN_HOLIDAYS[c.town.toLowerCase()];
@@ -3570,7 +3642,7 @@ document.addEventListener('change', async ev => {
       else lista[i].name = t.value.slice(0, 40);
       c.extraHolidays = lista;
     }
-    if (await store.send('api/config', 'PUT', c)) { state.config = c; render(); toast('Feriados guardados.'); }
+    if (await store.send('api/config', 'PUT', c)) { state.config = c; render(); toast('Guardado.'); }
     return;
   }
   if (t.id === 'pref-updateCheck') {
