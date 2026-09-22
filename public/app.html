@@ -1446,6 +1446,9 @@ function generate(wk, fromDay = 0) {
   const saturdaysBefore = id => before(id, (c, d) => d >= 5 && worksOn(c) && !c.sh?.night);
   const target = id => weeklyTarget(state.employees[id]);
   const dayShifts = sortedShifts().filter(sh => !sh.night && !sh.onlyDuty && !sh.back);
+  const backShifts = sortedShifts().filter(sh => sh.back);
+  /* Quem é de backoffice faz sempre o horário de backoffice, se houver um definido. */
+  const shiftsFor = id => (state.employees[id].backoffice && backShifts.length ? backShifts : dayShifts);
   const dd = dutyDay(wk);
 
   /* 1. Turnos fixos */
@@ -1513,13 +1516,13 @@ function generate(wk, fromDay = 0) {
     for (const id of order) {
       const falta = target(id) - hours[id];
       if (falta <= 0.01) continue;
-      const livres = diasUteis.filter(d => !frozen(d) && !cells[id][d] && !isClosed(d, wk) && dayShifts.some(sh => hardOk(id, d, sh.id)));
+      const livres = diasUteis.filter(d => !frozen(d) && !cells[id][d] && !isClosed(d, wk) && shiftsFor(id).some(sh => hardOk(id, d, sh.id)));
       const precisa = Math.min(livres.length, Math.ceil(falta / dayHours() - 1e-9));
       /* Escolhe os dias com menos gente (empate: por ordem da semana). */
       const escolha = livres.slice().sort((a, b) => headcount(a) - headcount(b) || a - b).slice(0, precisa);
       for (const d of escolha.sort((a, b) => a - b)) {
         /* Turno provisório ao acaso entre os possíveis; o nivelamento a seguir acerta. */
-        const ok = dayShifts.filter(x => hardOk(id, d, x.id));
+        const ok = shiftsFor(id).filter(x => hardOk(id, d, x.id));
         if (ok.length) put(id, d, ok[Math.floor(Math.random() * ok.length)].id);
       }
     }
@@ -1531,9 +1534,9 @@ function generate(wk, fromDay = 0) {
       let excesso = Math.round((hours[id] - target(id)) * 60);
       for (let d = 0; d < 7 && excesso > 0; d++) {
         const r = cells[id][d];
-        if (!r?.s || held(id, d)) continue;
+        if (!r?.s || held(id, d) || r.post === 'back') continue; // em backoffice o almoço é fixo
         const sh = shiftOn(shiftById(r.s), d, wk);
-        if (!sh?.lunch) continue;
+        if (!sh?.lunch || sh.back) continue;
         const atual = r.ld || lunchMinLen();
         const cabem = lunchLengths().filter(v => v > atual && v - atual <= excesso && lunchOptions(sh, v).length);
         if (!cabem.length) continue;

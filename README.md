@@ -214,6 +214,8 @@ exportação e importação em JSON.
   não trabalha ao sábado nem ao domingo.
 - **Backoffice por defeito**: na ficha, marca quem trabalha sempre em backoffice. Os
   turnos dessa pessoa entram logo nesse posto e ela não é escalada ao fim de semana.
+  Quem está marcado como backoffice faz **sempre o horário de backoffice** (a geração não
+  lhe dá turnos de balcão) e almoça sempre à hora fixa, com a duração mínima.
   O horário de backoffice vem definido como um turno próprio — **Backoffice, 09:00–18:00
   com almoço das 12:00 às 13:00** — marcado em *Turnos* com a opção **Backoffice** (nunca
   é usado ao balcão nem cortado ao horário de abertura). Na ficha, aplica-o de segunda a
