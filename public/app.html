@@ -2537,15 +2537,17 @@ function renderPrefs() {
   </section>
   <section class="panel">
     <h3>Escala</h3>
-    <div class="rules-form">
-      <div class="field-inline"><label class="toggle" for="pref-counts" style="padding:0;border:0;background:none"><span><b>Contagens no fundo da escala</b><small>As linhas com o número de pessoas por turno, backoffice, férias, baixas e folgas extra</small></span><input type="checkbox" class="switch" id="pref-counts" data-hol="showCounts" ${C.showCounts === false ? '' : 'checked'} ${ro}></label></div>
+    <div class="toggles" style="max-width:560px">
+      <label class="toggle" for="pref-counts"><span><b>Contagens no fundo da escala</b><small>As linhas com o número de pessoas por turno, backoffice, férias, baixas e folgas extra</small></span><input type="checkbox" class="switch" id="pref-counts" data-hol="showCounts" ${C.showCounts === false ? '' : 'checked'} ${ro}></label>
     </div>
   </section>
   <section class="panel">
     <h3>Feriados</h3>
     <p>Os feriados nacionais (incluindo os que mudam com a Páscoa) são marcados na escala. Indica a localidade para juntar o feriado municipal — confirma sempre a data, que varia de concelho para concelho.</p>
+    <div class="toggles" style="max-width:560px;margin-bottom:14px">
+      <label class="toggle" for="hol-on"><span><b>Marcar feriados nacionais</b><small>Incluindo os que mudam com a Páscoa</small></span><input type="checkbox" class="switch" id="hol-on" data-hol="holidays" ${C.holidays === false ? '' : 'checked'} ${ro}></label>
+    </div>
     <div class="rules-form">
-      <div class="field-inline"><label class="toggle" for="hol-on" style="padding:0;border:0;background:none"><span><b>Marcar feriados nacionais</b></span><input type="checkbox" class="switch" id="hol-on" data-hol="holidays" ${C.holidays === false ? '' : 'checked'} ${ro}></label></div>
       <div class="field-inline"><label for="hol-town">Localidade</label><input type="text" id="hol-town" data-hol="town" value="${esc(C.town || '')}" list="towns" maxlength="60" placeholder="Ex.: Lisboa" ${ro}><datalist id="towns">${Object.keys(TOWN_HOLIDAYS).filter(k => k === k.normalize('NFC')).map(k => `<option value="${esc(k[0].toUpperCase() + k.slice(1))}">`).join('')}</datalist><small>Ao escrever uma localidade conhecida, a data é preenchida automaticamente</small></div>
       <div class="field-inline"><label for="hol-town-day">Feriado municipal (dia-mês)</label><input type="text" id="hol-town-day" data-hol="townHoliday" value="${esc(C.townHoliday ? fmtMD(C.townHoliday) : '')}" placeholder="13-06" maxlength="5" ${ro}><small>Em branco não marca nenhum</small></div>
     </div>
