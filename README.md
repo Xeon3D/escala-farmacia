@@ -186,7 +186,8 @@ exportação e importação em JSON.
   são **pagas** ou vão para o **banco de horas**. Só as horas normais vão para o banco:
   as horas entre as 22:00 e as 09:00 são sempre pagas à parte (a dobrar) e nunca entram
   no banco.
-- **Noite de serviço**: das 19:00 às 09:00 nos dias úteis e a começar mais cedo ao fim de
+- **Noite de serviço**: das 19:00 às 09:00 nos dias úteis (quem já tinha a noite a terminar
+  às 07:00 é atualizado automaticamente para as 09:00, uma única vez) e a começar mais cedo ao fim de
   semana (18:00 por omissão, na regra *Noite ao fim de semana começa às*). Quem faz a noite
   fica obrigatoriamente de folga no dia seguinte
   (um turno nesse dia aparece como conflito). Se a noite calhar a sábado ou domingo, a

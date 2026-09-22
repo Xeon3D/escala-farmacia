@@ -211,6 +211,20 @@ def migrate() -> None:
         conn.commit()
 
 
+def migrate_night_end() -> None:
+    """Uma só vez: a noite de serviço passa a terminar às 09:00 (era 07:00) — a farmácia de
+    plantão fica aberta até às 09:00 do dia seguinte. Só mexe em turnos que ainda estejam a 07:00."""
+    if read_setting("_nightEnd09"):
+        return
+    with lock:
+        rows = conn.execute("SELECT id,name FROM shifts WHERE night=1 AND end='07:00'").fetchall()
+        for r in rows:
+            conn.execute("UPDATE shifts SET end='09:00' WHERE id=?", (r["id"],))
+            print(f"Base de dados: turno «{r['name']}» passa a terminar às 09:00.")
+        conn.commit()
+    write_setting("_nightEnd09", True)
+
+
 def init_data() -> None:
     migrate()
     with lock:
@@ -224,6 +238,9 @@ def init_data() -> None:
                 )
         for k, v in DEFAULT_SETTINGS.items():
             conn.execute("INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)", (k, json.dumps(v)))
+        conn.commit()
+    migrate_night_end()
+    with lock:
         if not conn.execute("SELECT 1 FROM employees LIMIT 1").fetchone():
             for (eid, name, role, color, night, weekend, pref, off, mx, fixed, notes, back) in SEED_EMPLOYEES:
                 conn.execute(
