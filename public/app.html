@@ -188,6 +188,12 @@ table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:980px}
 .cell.tone-sick{background:var(--sick-bg);color:var(--sick-ink)}
 .cell.locked{outline:2px solid var(--ink-3);outline-offset:-2px}
 .cell .pin.lockpin{left:auto;right:5px;top:auto;bottom:2px;opacity:1;font-size:11px}
+td.cellbox{position:relative}
+.adj{position:absolute;top:50%;transform:translateY(-50%);width:20px;height:26px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:6px;font:600 14px var(--sans);line-height:1;padding:0;z-index:2;opacity:0;transition:opacity .12s;cursor:pointer}
+.adj.minus{left:1px}.adj.plus{right:1px}
+td.cellbox:hover .adj,.adj:focus-visible{opacity:.95}
+.adj:hover{border-color:var(--accent);color:var(--accent)}
+@media print{.adj{display:none}}
 .cell .pin.backpin ~ .pin.lockpin{right:44px}
 .menu .locknote{padding:8px 10px;font-size:12px;color:var(--warn)}
 .cell.tone-xoff{background:var(--n-bg);color:var(--n-ink);border:1px dashed var(--n-ink)}
@@ -1084,19 +1090,39 @@ function getCell(wk, id, d) {
     s, sh: s ? shiftOn(shiftById(s), d, wk) : null, l: raw.l || '', ld, bank, vac, sick, xoff, lock,
     pay: raw.pay === 'bank' ? 'bank' : '', post: raw.post === 'back' ? 'back' : '',
     /* Extras: horas feitas nesse dia e, se souberes, a hora a que entrou. Turnos: horas a menos (chegou tarde / saiu cedo). */
-    hrs, from: validTime(raw.from) ? raw.from : '', less: s ? Math.max(0, +raw.less || 0) : 0,
+    /* «less» é o ajuste do dia: positivo = horas a menos, negativo = horas a mais. */
+    hrs, from: validTime(raw.from) ? raw.from : '', less: s ? Math.max(-12, Math.min(12, +raw.less || 0)) : 0,
   };
 }
 /** Horas de uma célula, já com as horas a menos de um turno ou as horas de um extra. */
+/** Horário que a pessoa faz mesmo nesse dia: o turno, encurtado ou prolongado pelo ajuste do dia.
+ *  As horas a menos saem do fim (sai mais cedo); as horas a mais prolongam o fim. */
+function cellSpan(c) {
+  if (!c?.sh) return null;
+  const [s, e] = span(c.sh);
+  const adj = Math.round((+c.less || 0) * 60);
+  if (!adj) return [s, e];
+  const dur = c.sh.lunch && c.l ? lunchLen(c) : 0, l = dur ? toMin(c.l) : null;
+  const dentro = (fim) => (l !== null ? Math.max(0, Math.min(fim, l + dur) - Math.min(fim, l)) : 0);
+  const alvo = Math.max(0, (e - s) - dentro(e) - adj); // minutos de trabalho pretendidos
+  if (l === null) return [s, Math.max(s, s + alvo)];
+  if (alvo <= l - s) return [s, s + alvo];                 // sai antes do almoço
+  return [s, Math.max(l, s + alvo + dur)];                 // sai depois do almoço
+}
+/** Turno tal como é feito nesse dia (com o ajuste de horas aplicado). */
+function cellShift(c) {
+  if (!c?.sh) return null;
+  if (!c.less) return c.sh;
+  const [s, e] = cellSpan(c);
+  return { ...c.sh, start: fmtMin(s), end: fmtMin(e % 1440 === e ? e : e - 1440), adjusted: true };
+}
 function cellHours(c) {
   if (!c) return null;
   if (c.sh) {
-    const h = hoursOf(c.sh, c.l, lunchLen(c));
-    if (!c.less) return h;
-    /* As horas a menos saem primeiro das normais; só depois das que contam a dobrar. */
-    const cut = Math.min(c.less, h.work), fromNormal = Math.min(cut, h.normal), fromDbl = cut - fromNormal;
-    const normal = h.normal - fromNormal, dbl = h.dbl - fromDbl, f = +cfg().doubleFactor || 2;
-    return { work: normal + dbl, normal, dbl, pay: normal + dbl * f, less: cut };
+    if (!c.less) return hoursOf(c.sh, c.l, lunchLen(c));
+    const [s, e] = cellSpan(c);
+    const h = hoursOf({ ...c.sh, start: fmtMin(s), end: fmtMin(e % 1440) }, c.l, lunchLen(c));
+    return { ...h, less: Math.max(0, +c.less || 0), adj: +c.less || 0 };
   }
   if (c.hrs) {
     if (c.from) return hoursOf({ start: c.from, end: fmtMin(toMin(c.from) + Math.round(c.hrs * 60)), lunch: false }, '');
@@ -1145,7 +1171,7 @@ function extraOffOwed(id, wk) {
 /** Contas da semana de uma pessoa: horas feitas, pagas, creditadas e descontadas. */
 function weekStats(id, wk) {
   const e = state.employees[id];
-  const out = { turnos: 0, work: 0, pay: 0, dbl: 0, apart: 0, banked: 0, used: 0, dutyWork: 0, vac: 0, sick: 0, xoff: 0, extraOff: 0, less: 0 };
+  const out = { turnos: 0, work: 0, planned: 0, adjust: 0, pay: 0, dbl: 0, apart: 0, banked: 0, used: 0, dutyWork: 0, vac: 0, sick: 0, xoff: 0, extraOff: 0, less: 0 };
   const duty = dutyDay(wk);
   for (let d = 0; d < 7; d++) {
     const c = getCell(wk, id, d);
@@ -1156,12 +1182,13 @@ function weekStats(id, wk) {
     if (c.bank) out.used += c.bank;
     if (!worksOn(c)) continue;
     out.turnos++;
-    const h = cellHours(c);
-    if (h.less) out.less += h.less;
+    const h = cellHours(c), prev = c.sh && c.less ? hoursOf(c.sh, c.l, lunchLen(c)) : h;
+    out.less += h.less || 0;
+    out.adjust += h.normal - prev.normal;  // + horas a mais, − horas a menos
     /* Só as horas normais contam como trabalhadas; as das 22h às 9h ficam à parte (pagas ×fator). */
     out.dbl += h.dbl; out.apart += h.dbl * (+cfg().doubleFactor || 2);
     if (c.sh && d === duty && c.pay === 'bank') { out.banked += h.normal; out.dutyWork += h.normal; }
-    else out.work += h.normal;
+    else { out.work += h.normal; out.planned += prev.normal; }
     out.pay = out.work + out.apart;
     if (c.sh?.night && d >= 5) out.extraOff++; // dá uma folga extra na semana seguinte
   }
@@ -1170,9 +1197,11 @@ function weekStats(id, wk) {
   out.target = Math.max(0, weeklyTarget(e) - (out.vac + out.sick + out.xoff) * dayHours());
   out.credited = out.work + out.used;             // conta para o mínimo semanal
   out.missing = Math.max(0, out.target - out.credited);
-  /* O que passar das horas da semana são horas extra: vão para o banco, para gastar mais tarde. */
-  out.over = out.target > 0 ? Math.max(0, Math.round((out.work - out.target) * 100) / 100) : 0;
+  /* O que a escala prevê acima das horas da semana são horas extra: vão para o banco.
+     Os ajustes do dia (horas a mais ou a menos) entram no banco tal como estão. */
+  out.over = out.target > 0 ? Math.max(0, Math.round((out.planned - out.target) * 100) / 100) : 0;
   out.banked += out.over;
+  out.adjust = Math.round(out.adjust * 100) / 100;
   return out;
 }
 
@@ -1192,6 +1221,10 @@ function bankMovements(id, limit = 40) {
       const when = `${DAYS[d]} ${addDays(parseISO(wk), d).getDate()} ${MONTHS[addDays(parseISO(wk), d).getMonth()]}`;
       if (c.sh && d === dutyDay(wk) && c.pay === 'bank') add({ wk, when, what: 'Horas do plantão para o banco', h: cellHours(c).normal }, dayDone(wk, d));
       if (c.bank) add({ wk, when, what: isFullDayOff(c) ? 'Folga paga pelo banco' : 'Horas descontadas do banco', h: -c.bank }, dayDone(wk, d));
+      if (c.sh && c.less) {
+        const dif = cellHours(c).normal - hoursOf(c.sh, c.l, lunchLen(c)).normal, [s2, e2] = cellSpan(c);
+        if (dif) add({ wk, when, what: `${dif > 0 ? 'Horas a mais' : 'Horas a menos'} (fez ${fmtMin(s2)}–${fmtMin(e2 % 1440)})`, h: dif }, dayDone(wk, d));
+      }
     }
     if (st.over) add({ wk, when: `Semana ${isoWeek(parseISO(wk))}`, what: `Horas extra (${fmtH(st.work)} h feitas, mínimo ${fmtH(st.target)} h)`, h: st.over }, weekDone(wk));
   }
@@ -1214,7 +1247,7 @@ const weekDone = wk => dayDone(wk, 6);
 /** Movimentos já realizados de uma semana: banco do plantão e descontos até hoje; horas extra só com a semana fechada. */
 function bankRealized(id, wk) {
   const st = weekStats(id, wk);
-  if (weekDone(wk)) return st.banked - st.used;
+  if (weekDone(wk)) return st.banked - st.used + st.adjust;
   let v = 0;
   for (let d = 0; d < 7; d++) {
     if (!dayDone(wk, d)) break;
@@ -1222,6 +1255,7 @@ function bankRealized(id, wk) {
     if (!c) continue;
     if (c.sh && d === dutyDay(wk) && c.pay === 'bank') v += cellHours(c).normal;
     if (c.bank) v -= c.bank;
+    if (c.sh && c.less) v += cellHours(c).normal - hoursOf(c.sh, c.l, lunchLen(c)).normal;
   }
   return v;
 }
@@ -1289,7 +1323,7 @@ function cellIssues(e, id, wk, d, cell, lookup = getCell, both = false) {
   const p = lookup(wk, id, d - 1);
   if (p?.sh?.night) out.push({ lvl: 'bad', msg: 'Folga obrigatória no dia a seguir à noite de serviço' });
   else if (p?.sh) {
-    const rest = 1440 + toMin(sh.start) - span(p.sh)[1];
+    const rest = 1440 + toMin(sh.start) - cellSpan(p)[1];
     if (rest < minRest) out.push({ lvl: 'bad', msg: `Só ${fmtH(Math.max(0, rest) / 60)} h de descanso após o turno anterior (mínimo ${C.minRest} h)` });
   }
   if (both) {
@@ -1377,9 +1411,9 @@ function presence(wk, d, ids) {
   const ranges = [];
   for (const id of ids) {
     const c = getCell(wk, id, d), p = getCell(wk, id, d - 1);
-    if (c?.sh) { const [s, e] = span(c.sh); ranges.push({ s, e, l: c.sh.lunch && c.l ? toMin(c.l) : null, ld: lunchLen(c), back: c.post === 'back' }); }
+    if (c?.sh) { const [s, e] = cellSpan(c); ranges.push({ s, e, l: c.sh.lunch && c.l ? toMin(c.l) : null, ld: lunchLen(c), back: c.post === 'back' }); }
     else if (extraSpan(c)) { const [s, e] = extraSpan(c); ranges.push({ s, e, l: null, back: c.post === 'back' }); }
-    if (p?.sh) { const [s, e] = span(p.sh); if (e > 1440) ranges.push({ s: s - 1440, e: e - 1440, l: null, back: p.post === 'back' }); }
+    if (p?.sh) { const [s, e] = cellSpan(p); if (e > 1440) ranges.push({ s: s - 1440, e: e - 1440, l: null, back: p.post === 'back' }); }
   }
   const presentes = t => ranges.filter(r => r.s <= t && t < r.e && !(r.l !== null && r.l <= t && t < r.l + (r.ld || lunchMinLen())));
   const slots = [];
@@ -1792,7 +1826,7 @@ function renderSchedule() {
       const c = getCell(wk, id, d), iss = cellIssues(e, id, wk, d, c), worst = worstOf(iss);
       iss.filter(i => i.lvl !== 'info').forEach(i => alerts.push({ lvl: i.lvl, who: e.name, when: `${DAYS[d]} ${days[d].getDate()}`, msg: i.msg }));
       const desc = c
-        ? (c.sh ? `${c.sh.name} ${c.sh.start}–${c.sh.end}${c.l ? `, almoço ${c.l}` : ''}${c.less ? `, menos ${fmtH(c.less)} h` : ''}${c.pay === 'bank' ? ', horas para o banco' : ''}`
+        ? (c.sh ? `${c.sh.name} ${cellShift(c).start}–${cellShift(c).end}${c.l ? `, almoço ${c.l}` : ''}${c.less ? `, ${c.less > 0 ? 'menos' : 'mais'} ${fmtH(Math.abs(c.less))} h` : ''}${c.pay === 'bank' ? ', horas para o banco' : ''}`
           : c.hrs ? `${fmtH(c.hrs)} h como extra${c.from ? ` a partir das ${c.from}` : ''}`
           : c.bank ? `desconto de ${fmtH(c.bank)} h do banco${isFullDayOff(c) ? ' (folga)' : ''}`
           : c.vac ? 'férias' : c.sick ? 'baixa médica' : c.xoff ? 'folga extra do plantão de fim de semana' : c.lock ? 'folga' : 'turno removido')
@@ -1801,9 +1835,9 @@ function renderSchedule() {
       let tone = 'empty', inner = '<span>folga</span>';
       if (c?.sh) {
         tone = toneOf(c.sh) + (isBackoffice(c) ? ' back' : '');
-        /* Em cima as horas trabalhadas nesse dia (já sem almoço e horas a menos); por baixo o horário e o almoço. */
-        const h = cellHours(c);
-        inner = `<b>${fmtH(h.normal)} h</b><span>${c.sh.start}–${c.sh.end}</span>` +
+        /* Em cima as horas trabalhadas nesse dia; por baixo o horário mesmo feito (com o ajuste) e o almoço. */
+        const h = cellHours(c), ef = cellShift(c);
+        inner = `<b>${fmtH(h.normal)} h</b><span>${ef.start}–${ef.end}</span>` +
           (c.sh.lunch ? `<span class="lu">${c.l ? 'alm. ' + c.l + (lunchLen(c) !== lunchMinLen() ? ` (${fmtDur(lunchLen(c))})` : '') : 'sem almoço'}</span>` : h.dbl ? `<span class="lu">+ ${fmtH(h.dbl)} h nocturnas</span>` : '');
       } else if (c?.vac) {
         tone = 'tone-vac';
@@ -1823,7 +1857,11 @@ function renderSchedule() {
         inner = `<b>−${fmtH(c.bank)} h</b><span>banco</span>${isFullDayOff(c) ? '<span class="lu">folga</span>' : ''}`;
       } else if (c?.lock) { tone = 'empty'; inner = '<span>folga</span>'; }
       else if (c) { tone = 'tone-x'; inner = '<b>?</b><span>removido</span>'; }
-      tds += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}"><button class="cell ${tone} ${c?.lock ? 'locked' : ''} ${worst && worst !== 'info' ? 'has-' + worst : ''}" data-action="cell" data-id="${esc(id)}" data-d="${d}" title="${esc(label)}" aria-label="${esc(label)}" aria-haspopup="menu" ${state.readOnly ? 'disabled' : ''}>${inner}${e.fixed?.[d] ? '<i class="pin">fixo</i>' : ''}${c?.pay === 'bank' ? '<i class="pin bankpin">banco</i>' : ''}${isBackoffice(c) ? '<i class="pin backpin">back</i>' : ''}${c?.less ? `<i class="pin lesspin">−${fmtH(c.less)}h</i>` : ''}${c?.lock ? '<i class="pin lockpin" title="Bloqueada">🔒</i>' : ''}${worst === 'bad' || worst === 'warn' ? '<i class="flag"></i>' : ''}</button></td>`;
+      const ajust = c?.sh && !c.lock && !state.readOnly
+        ? `<button class="adj minus" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="0.5" title="Meia hora a menos (sai mais cedo)" tabindex="-1">−</button>`
+          + `<button class="adj plus" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="-0.5" title="Meia hora a mais (sai mais tarde)" tabindex="-1">+</button>`
+        : '';
+      tds += `<td class="cellbox ${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}">${ajust}<button class="cell ${tone} ${c?.lock ? 'locked' : ''} ${worst && worst !== 'info' ? 'has-' + worst : ''}" data-action="cell" data-id="${esc(id)}" data-d="${d}" title="${esc(label)}" aria-label="${esc(label)}" aria-haspopup="menu" ${state.readOnly ? 'disabled' : ''}>${inner}${e.fixed?.[d] ? '<i class="pin">fixo</i>' : ''}${c?.pay === 'bank' ? '<i class="pin bankpin">banco</i>' : ''}${isBackoffice(c) ? '<i class="pin backpin">back</i>' : ''}${c?.less ? `<i class="pin lesspin">${c.less > 0 ? '−' : '+'}${fmtH(Math.abs(c.less))}h</i>` : ''}${c?.lock ? '<i class="pin lockpin" title="Bloqueada">🔒</i>' : ''}${worst === 'bad' || worst === 'warn' ? '<i class="flag"></i>' : ''}</button></td>`;
     }
     const over = false;
     if (st.xoffOwed) alerts.push({ lvl: 'warn', who: e.name, when: 'Semana', msg: `Tem direito a ${st.xoffOwed === 1 ? 'uma folga extra' : st.xoffOwed + ' folgas extra'} pela noite de plantão ao fim de semana — ainda não está marcada` });
@@ -1842,7 +1880,7 @@ function renderSchedule() {
       (st.dbl ? `<span class="pay">+${fmtH(st.dbl)} h nocturnas</span>` : '') +
       (st.banked ? `<span class="bank">banco +${fmtH(st.banked)} h${st.over ? ` (${fmtH(st.over)} h extra)` : ''}</span>` : '') +
       (st.used ? `<span class="bank used">banco −${fmtH(st.used)} h</span>` : '') +
-      (st.less ? `<span class="pay" style="color:var(--warn)">−${fmtH(st.less)} h a menos</span>` : '') +
+      (st.adjust ? `<span class="pay" style="color:var(--warn)">${st.adjust > 0 ? '+' : '−'}${fmtH(Math.abs(st.adjust))} h ${st.adjust > 0 ? 'a mais' : 'a menos'}</span>` : '') +
       `<button class="linkbtn saldo" data-action="bank-report" data-id="${esc(id)}" title="Saldo do banco com o que já foi trabalhado até hoje (as horas desta semana só entram quando forem feitas)">saldo ${fmtBank(saldoFim)}</button></td></tr>`;
   }
 
@@ -2016,7 +2054,7 @@ function renderCounter() {
     for (const id of ids) {
       const c = getCell(wk, id, d);
       if (!c || c.sh?.night) continue;
-      const sp = c.sh ? span(c.sh) : extraSpan(c);
+      const sp = c.sh ? cellSpan(c) : extraSpan(c);
       if (!sp || sp[0] >= t + 60 || sp[1] <= t) continue;
       const l = c.sh?.lunch && c.l ? toMin(c.l) : null, lm = lunchLen(c);
       const lunchAll = l !== null && l <= t && l + lm >= t + 60;          // almoço ocupa a hora toda
@@ -2071,7 +2109,7 @@ function monthStats(monthKey) {
   const last = new Date(y, m, 0).getDate();
   const rows = {};
   sortedIds().forEach(id => {
-    rows[id] = { turnos: 0, noites: 0, fds: 0, work: 0, dbl: 0, normal: 0, pay: 0, apart: 0, banked: 0, used: 0, vac: 0, sick: 0, extraOff: 0, less: 0, dias: [] };
+    rows[id] = { turnos: 0, noites: 0, fds: 0, work: 0, dbl: 0, normal: 0, pay: 0, apart: 0, banked: 0, used: 0, vac: 0, sick: 0, extraOff: 0, less: 0, adjust: 0, dias: [] };
   });
   for (let day = 1; day <= last; day++) {
     const date = new Date(y, m - 1, day), wk = iso(mondayOf(date)), d = dayIndex(date);
@@ -2088,6 +2126,7 @@ function monthStats(monthKey) {
       const h = cellHours(c);
       r.turnos++; if (c.sh?.night) r.noites++; if (d >= 5) r.fds++;
       if (h.less) r.less += h.less;
+      if (c.sh && c.less) r.adjust += h.normal - hoursOf(c.sh, c.l, lunchLen(c)).normal;
       r.dbl += h.dbl; r.apart += h.dbl * (+cfg().doubleFactor || 2);
       if (c.sh && d === duty && c.pay === 'bank') r.banked += h.normal;
       else { r.work += h.normal; r.normal += h.normal; }
@@ -2100,7 +2139,7 @@ function monthStats(monthKey) {
   for (let wk = iso(mondayOf(new Date(y, m - 1, 1))); wk <= iso(mondayOf(new Date(y, m - 1, last))); wk = shiftWeek(wk, 1)) {
     const fim = addDays(parseISO(wk), 6);
     if (fim.getMonth() !== m - 1) continue;
-    sortedIds().forEach(id => { const o = weekStats(id, wk).over; if (o) { rows[id].banked += o; rows[id].over = (rows[id].over || 0) + o; } });
+    sortedIds().forEach(id => { const st = weekStats(id, wk); const o = st.over + st.adjust; if (o) { rows[id].banked += o; rows[id].over = (rows[id].over || 0) + o; } });
   }
   /* Saldo do banco no fim do mês */
   const lastWeek = iso(mondayOf(new Date(y, m - 1, last)));
@@ -2110,11 +2149,11 @@ function monthStats(monthKey) {
 function renderHours() {
   const [y, m] = state.month.split('-').map(Number);
   const rows = monthStats(state.month), ids = sortedIds();
-  const tot = { turnos: 0, noites: 0, fds: 0, work: 0, dbl: 0, apart: 0, pay: 0, banked: 0, used: 0, saldo: 0, vac: 0, sick: 0, over: 0 };
+  const tot = { turnos: 0, noites: 0, fds: 0, work: 0, dbl: 0, apart: 0, pay: 0, banked: 0, used: 0, saldo: 0, vac: 0, sick: 0, over: 0, adjust: 0 };
   ids.forEach(id => {
     const r = rows[id];
     tot.turnos += r.turnos; tot.noites += r.noites; tot.fds += r.fds; tot.work += r.work;
-    tot.dbl += r.dbl; tot.apart += r.apart; tot.pay += r.pay; tot.banked += r.banked; tot.over += r.over || 0; tot.used += r.used; tot.saldo += r.saldo; tot.vac += r.vac; tot.sick += r.sick;
+    tot.dbl += r.dbl; tot.apart += r.apart; tot.pay += r.pay; tot.banked += r.banked; tot.over += r.over || 0; tot.adjust += r.adjust || 0; tot.used += r.used; tot.saldo += r.saldo; tot.vac += r.vac; tot.sick += r.sick;
   });
   const maxPay = Math.max(1, ...ids.map(id => rows[id].work));
   const C = cfg();
@@ -2128,6 +2167,7 @@ function renderHours() {
       <td class="vaccol">${r.vac || '<span class="muted">—</span>'}</td>
       <td class="sickcol">${r.sick || '<span class="muted">—</span>'}</td>
       <td><span class="big">${fmtH(r.work)}</span><div class="bar" title="${fmtH(r.work)} h trabalhadas"><i style="width:${Math.round(r.work / maxPay * 100)}%"></i></div></td>
+      <td class="bankcol">${r.adjust ? (r.adjust > 0 ? '+' : '−') + fmtH(Math.abs(r.adjust)) + ' h' : '<span class="muted">—</span>'}</td>
       <td class="bankcol"><button class="linkbtn mono" data-action="bank-report" data-id="${esc(id)}" title="Ver os movimentos do banco de horas">${r.over ? '+' + fmtH(r.over) + ' h' : '—'}</button></td>
       <td class="dbl">${r.dbl ? fmtH(r.dbl) : '<span class="muted">—</span>'}</td>
       <td class="dbl">${r.apart ? fmtH(r.apart) : '<span class="muted">—</span>'}</td>
@@ -2156,11 +2196,11 @@ function renderHours() {
     <span><b class="${tot.saldo < 0 ? 'neg' : ''}">${fmtBank(tot.saldo)}</b>no banco de horas</span>
   </div>
   <div class="grid-wrap"><table class="hours">
-    <thead><tr><th class="emp">Funcionário</th><th>Turnos</th><th>Noites</th><th>Fins de semana</th><th>Dias de férias</th><th>Baixa</th><th>Horas trabalhadas</th><th>Horas extra</th><th>Horas nocturnas</th><th>A pagar pelas nocturnas</th><th>Para o banco</th><th>Descontadas</th><th>Saldo do banco</th></tr></thead>
+    <thead><tr><th class="emp">Funcionário</th><th>Turnos</th><th>Noites</th><th>Fins de semana</th><th>Dias de férias</th><th>Baixa</th><th>Horas trabalhadas</th><th>Ajustes</th><th>Horas extra</th><th>Horas nocturnas</th><th>A pagar pelas nocturnas</th><th>Para o banco</th><th>Descontadas</th><th>Saldo do banco</th></tr></thead>
     <tbody>${body}</tbody>
-    <tfoot><tr><th class="emp">Total da equipa</th><td>${tot.turnos}</td><td>${tot.noites}</td><td>${tot.fds}</td><td class="vaccol">${tot.vac || '—'}</td><td class="sickcol">${tot.sick || '—'}</td><td>${fmtH(tot.work)}</td><td class="bankcol">${tot.over ? '+' + fmtH(tot.over) + ' h' : '—'}</td><td class="dbl">${fmtH(tot.dbl)}</td><td class="dbl">${fmtH(tot.apart)}</td><td class="bankcol">${tot.banked ? '+' + fmtH(tot.banked) : '—'}</td><td class="bankcol">${tot.used ? '−' + fmtH(tot.used) : '—'}</td><td>${fmtBank(tot.saldo)}</td></tr></tfoot>
+    <tfoot><tr><th class="emp">Total da equipa</th><td>${tot.turnos}</td><td>${tot.noites}</td><td>${tot.fds}</td><td class="vaccol">${tot.vac || '—'}</td><td class="sickcol">${tot.sick || '—'}</td><td>${fmtH(tot.work)}</td><td class="bankcol">${tot.adjust ? (tot.adjust > 0 ? '+' : '−') + fmtH(Math.abs(tot.adjust)) + ' h' : '—'}</td><td class="bankcol">${tot.over ? '+' + fmtH(tot.over) + ' h' : '—'}</td><td class="dbl">${fmtH(tot.dbl)}</td><td class="dbl">${fmtH(tot.apart)}</td><td class="bankcol">${tot.banked ? '+' + fmtH(tot.banked) : '—'}</td><td class="bankcol">${tot.used ? '−' + fmtH(tot.used) : '—'}</td><td>${fmtBank(tot.saldo)}</td></tr></tfoot>
   </table></div>
-  <p class="note">O <b>banco de horas</b> junta as horas trabalhadas acima do mínimo de cada semana (coluna «horas extra» — clica no valor para ver os movimentos), as horas normais do dia de plantão que escolheste não pagar (as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte e nunca vão para o banco), e desconta as horas de folga que a pessoa gastou. O saldo já inclui o valor inicial de cada ficha. As horas trabalhadas são o tempo real de presença, já sem o almoço e já com as horas a menos de quem chegou tarde ou saiu cedo; as horas dos extras contam pelo que marcaste em cada dia. As horas entre <b>${C.doubleFrom}</b> e <b>${C.doubleTo}</b> <b>não entram nas horas trabalhadas</b>: ficam na coluna «horas nocturnas» e pagam-se à parte, ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}. Na noite de serviço das ${shiftById('N')?.start || '19:00'} às ${shiftById('N')?.end || '07:00'} só as primeiras horas (até às ${C.doubleFrom}) contam como trabalhadas. Um turno conta no dia em que começa.</p>`}`;
+  <p class="note">O <b>banco de horas</b> junta as horas trabalhadas acima do mínimo de cada semana (coluna «horas extra» — clica no valor para ver os movimentos), as horas normais do dia de plantão que escolheste não pagar (as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte e nunca vão para o banco), e desconta as horas de folga que a pessoa gastou. O saldo já inclui o valor inicial de cada ficha. As horas trabalhadas são o tempo real de presença, já sem o almoço e já com os ajustes do dia (horas a mais ou a menos, que também entram no banco); as horas dos extras contam pelo que marcaste em cada dia. As horas entre <b>${C.doubleFrom}</b> e <b>${C.doubleTo}</b> <b>não entram nas horas trabalhadas</b>: ficam na coluna «horas nocturnas» e pagam-se à parte, ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}. Na noite de serviço das ${shiftById('N')?.start || '19:00'} às ${shiftById('N')?.end || '07:00'} só as primeiras horas (até às ${C.doubleFrom}) contam como trabalhadas. Um turno conta no dia em que começa.</p>`}`;
 }
 
 function renderTeam() {
@@ -2557,15 +2597,16 @@ function openMenu(btn) {
   const st = weekStats(id, wk);
   const head = `<div class="menu-head">${esc(e.name)} · ${DAYS_LONG[d]} ${addDays(parseISO(wk), d).getDate()}`
     + `<br>Semana: ${st.target ? `${fmtH(st.credited)} de ${fmtH(st.target)} h${st.missing ? ` · faltam ${fmtH(st.missing)} h` : ''}` : `${fmtH(st.credited)} h${e.extra ? ' · extra, sem mínimo' : ''}`}</div>`;
-  /* Chegou mais tarde ou saiu mais cedo: horas a menos nesse turno. */
+  /* Ajuste do dia: horas a menos (sai mais cedo) ou a mais (fica mais tempo), de meia em meia hora. */
   let lessPick = '';
   if (cur?.sh) {
-    const full = hoursOf(cur.sh, cur.l).work;
-    lessPick = `<div class="lunch-pick"><p>Horas a menos (chegou tarde / saiu cedo) · turno de ${fmtH(full)} h</p><div style="align-items:center">
-      ${[0.5, 1, 2, 4].map(v => `<button class="lchip ${cur.less === v ? 'cur' : ''}" data-action="less" data-h="${v}">−${fmtH(v)} h</button>`).join('')}
-      <label style="font-size:12px;color:var(--ink-3)">Outro <input type="number" id="x-less" min="0" max="${full}" step="0.5" value="${cur.less && ![0.5, 1, 2, 4].includes(cur.less) ? cur.less : ''}"></label>
-      <button class="lchip" data-action="less" data-h="input">Aplicar</button>
-      ${cur.less ? '<button class="lchip" data-action="less" data-h="0">Repor horas</button>' : ''}
+    const [es, ee] = cellSpan(cur), hh = cellHours(cur), adj = +cur.less || 0;
+    lessPick = `<div class="lunch-pick"><p>Ajuste do dia · faz ${fmtMin(es)}–${fmtMin(ee % 1440)} (${fmtH(hh.normal)} h)${adj ? ` · ${adj > 0 ? '−' : '+'}${fmtH(Math.abs(adj))} h no banco` : ''}</p><div style="align-items:center">
+      <button class="lchip" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="0.5">−30 min</button>
+      <button class="lchip" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="-0.5">+30 min</button>
+      <button class="lchip" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="2">−2 h</button>
+      <button class="lchip" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="-2">+2 h</button>
+      ${adj ? '<button class="lchip" data-action="less" data-h="0">Repor o turno</button>' : ''}
     </div></div>`;
   }
   let postPick = '';
@@ -2671,15 +2712,19 @@ function setExtraHours(id, d, hrs, from) {
   if (cur?.post) v.post = cur.post;
   writeCell(id, d, v);
 }
-/** Horas a menos num turno (chegou tarde ou saiu cedo); 0 repõe. */
+/** Ajuste do dia: horas a menos (positivo) ou a mais (negativo); 0 repõe o turno. */
 function setLess(id, d, hours) {
   const cur = getCell(state.week, id, d);
   if (!cur?.sh) return;
   const v = cellBase(cur);
-  const max = hoursOf(cur.sh, cur.l).work;
-  const h = Math.min(max, Math.max(0, Math.round(hours * 2) / 2));
+  const max = hoursOf(cur.sh, cur.l, lunchLen(cur)).work;   // não se tira mais do que o turno tem
+  const h = Math.min(max, Math.max(-8, Math.round(hours * 2) / 2));
   if (h) v.less = h; else delete v.less;
   writeCell(id, d, v);
+  const c = getCell(state.week, id, d);
+  if (!c?.sh) return;
+  const [s2, e2] = cellSpan(c);
+  toast(h ? `${fmtMin(s2)}–${fmtMin(e2 % 1440)} · ${h > 0 ? '−' : '+'}${fmtH(Math.abs(h))} h no banco` : 'Horas do turno repostas.');
 }
 function setDutyPay(id, d, pay) {
   const cur = getCell(state.week, id, d);
@@ -2770,12 +2815,12 @@ function redistributeLunches() {
 function downloadCSV() {
   const [y, m] = state.month.split('-').map(Number);
   const rows = monthStats(state.month), C = cfg();
-  const head = ['Funcionário', 'Função', 'Turnos', 'Noites', 'Fins de semana', 'Dias de férias', 'Dias de baixa', 'Horas trabalhadas', 'Horas a menos',
+  const head = ['Funcionário', 'Função', 'Turnos', 'Noites', 'Fins de semana', 'Dias de férias', 'Dias de baixa', 'Horas trabalhadas', 'Ajustes do dia',
     `Horas nocturnas (${C.doubleFrom}-${C.doubleTo})`, `A pagar pelas nocturnas (x${+C.doubleFactor || 2})`, 'Para o banco', 'Descontadas do banco', 'Saldo do banco'];
   const lines = [head.join(';')];
   for (const id of sortedIds()) {
     const e = state.employees[id], r = rows[id];
-    lines.push([e.name, e.role || '', r.turnos, r.noites, r.fds, r.vac, r.sick, fmtH(r.work), fmtH(r.less), fmtH(r.dbl), fmtH(r.apart),
+    lines.push([e.name, e.role || '', r.turnos, r.noites, r.fds, r.vac, r.sick, fmtH(r.work), fmtH(r.adjust), fmtH(r.dbl), fmtH(r.apart),
       fmtH(r.banked), fmtH(r.used), fmtH(r.saldo)]
       .map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'));
   }
@@ -2918,7 +2963,7 @@ document.addEventListener('click', async ev => {
   if (!el) { if (!ev.target.closest('#menu')) closeMenu(); return; }
   const a = el.dataset.action;
   if (['my-avatar', 'my-password', 'logout'].includes(a)) state.userMenuOpen = false;
-  if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation', 'sick', 'xoff', 'lock', 'less', 'extra-hours', 'lunch-len'].includes(a)) closeMenu();
+  if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation', 'sick', 'xoff', 'lock', 'less', 'adj', 'extra-hours', 'lunch-len'].includes(a)) closeMenu();
   switch (a) {
     case 'tab': state.tab = el.dataset.tab; ls.set('escala.tab', state.tab); render(); window.scrollTo(0, 0); break;
     case 'logout':
@@ -2987,11 +3032,11 @@ document.addEventListener('click', async ev => {
       setPost(ctx.id, ctx.d, el.dataset.post);
       break;
     }
-    case 'less': {
-      const ctx = menuCtx; if (!ctx) break;
-      const h = el.dataset.h === 'input' ? +($('#x-less')?.value || 0) : +el.dataset.h;
-      setLess(ctx.id, ctx.d, h);
-      toast(h ? `Menos ${fmtH(h)} h neste turno.` : 'Horas do turno repostas.');
+    case 'less': { const ctx = menuCtx; if (!ctx) break; setLess(ctx.id, ctx.d, +el.dataset.h); break; }
+    case 'adj': {
+      /* Botões − e + da célula (e do menu): meia hora de cada vez, para o banco de horas. */
+      const id2 = el.dataset.id, d2 = +el.dataset.d;
+      setLess(id2, d2, Math.round(((getCell(state.week, id2, d2)?.less || 0) + +el.dataset.v) * 2) / 2);
       break;
     }
     case 'extra-hours': {

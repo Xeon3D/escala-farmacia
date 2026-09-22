@@ -872,7 +872,8 @@ def save_week(week: str, cells: dict) -> None:
                 # Extras: horas avulsas e hora de entrada. Turnos: horas a menos.
                 try:
                     hrs = 0.0 if sid else max(0.0, min(24.0, float(cell.get("hrs") or 0)))
-                    less = max(0.0, min(24.0, float(cell.get("less") or 0))) if sid else 0.0
+                    # Ajuste do dia: positivo = horas a menos, negativo = horas a mais.
+                    less = max(-12.0, min(24.0, float(cell.get("less") or 0))) if sid else 0.0
                 except (TypeError, ValueError):
                     hrs, less = 0.0, 0.0
                 start = str(cell.get("from") or "")[:5] if hrs else ""

@@ -224,9 +224,11 @@ exportação e importação em JSON.
   geração automática não a escala; em cada dia indicas no menu da célula quantas horas
   fez e, se quiseres, a que horas entrou (para contar no gráfico do balcão). As horas
   contam nos totais da semana e do mês.
-- **Horas a menos**: se alguém chegou mais tarde ou saiu mais cedo, no menu da célula
-  tiras −0,5, −1, −2, −4 h ou outro valor ao turno. As horas saem primeiro das normais
-  e só depois das que contam a dobrar.
+- **Ajuste do dia (− / +)**: passando o rato por cima de uma célula aparecem um **−** à
+  esquerda e um **+** à direita que tiram ou acrescentam meia hora ao turno (também há
+  botões no menu da célula). A célula passa a mostrar o **horário que a pessoa faz mesmo**
+  — por exemplo, entrada às 09:00 com duas horas de almoço e menos 4 h fica 09:00–15:00 —
+  e essas horas entram ou saem do **banco de horas**.
 - **Baixa médica**: marca-se dia a dia no menu da célula ou por período no botão
   *Férias / baixa* da ficha. Tal como as férias, não recebe turnos e desconta um dia ao
   mínimo da semana; aparece em coluna própria no separador *Horas*.
