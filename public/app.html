@@ -1977,7 +1977,8 @@ function renderSchedule() {
       `<button class="linkbtn saldo" data-action="bank-report" data-id="${esc(id)}" title="Saldo do banco com o que já foi trabalhado até hoje (as horas desta semana só entram quando forem feitas)">saldo ${fmtBank(saldoFim)}</button></td></tr>`;
   }
 
-  let foot = '', filled = 0;
+  /* O gráfico «Ao balcão» fica sempre em primeiro; as contagens vêm a seguir. */
+  let foot = '', contagens = '', filled = 0;
   const verContagens = cfg().showCounts !== false;
   for (const sh of sortedShifts()) {
     let tds = '';
@@ -1987,7 +1988,7 @@ function renderSchedule() {
       if (have < req) alerts.push({ lvl: 'bad', who: 'Cobertura', when: `${DAYS[d]} ${days[d].getDate()}`, msg: `${sh.name} (${sh.start}): ${have} de ${req} ${req === 1 ? 'pessoa necessária' : 'pessoas necessárias'}` });
       tds += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}">${req || have ? `<span class="cov ${have < req ? 'short' : 'ok'}" title="${have} ${have === 1 ? 'pessoa' : 'pessoas'}${req ? `, ${req} necessária` : ''}">${req ? `${have}/${req}` : have}</span>` : '<span class="cov none">—</span>'}</td>`;
     }
-    if (verContagens) foot += `<tr><th scope="row"><span class="dot ${toneOf(sh)}"></span>${esc(sh.name)}<small>${sh.start}–${sh.end}${sh.onlyDuty ? ' · só no plantão' : ''}</small></th>${tds}<td class="tot"></td></tr>`;
+    if (verContagens) contagens += `<tr><th scope="row"><span class="dot ${toneOf(sh)}"></span>${esc(sh.name)}<small>${sh.start}–${sh.end}${sh.onlyDuty ? ' · só no plantão' : ''}</small></th>${tds}<td class="tot"></td></tr>`;
   }
   /* Fim de semana: cada dia aberto precisa do número de pessoas previsto. */
   for (const d of [5, 6]) {
@@ -2038,7 +2039,7 @@ function renderSchedule() {
     backTotal += n;
     backRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}">${n ? `<span class="cov ok">${n}</span>` : '<span class="cov none">—</span>'}</td>`;
   }
-  if (backTotal && verContagens) foot += `<tr><th scope="row">Backoffice<small>não conta para o balcão</small></th>${backRow}<td class="tot"></td></tr>`;
+  if (backTotal && verContagens) contagens += `<tr><th scope="row">Backoffice<small>não conta para o balcão</small></th>${backRow}<td class="tot"></td></tr>`;
 
   let vacRow = '';
   let vacTotal = 0;
@@ -2047,21 +2048,21 @@ function renderSchedule() {
     vacTotal += n;
     vacRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''}">${n ? `<span class="cov extra">${n}</span>` : '<span class="cov none">—</span>'}</td>`;
   }
-  if (vacTotal && verContagens) foot += `<tr><th scope="row"><span class="dot tone-vac"></span>De férias</th>${vacRow}<td class="tot"></td></tr>`;
+  if (vacTotal && verContagens) contagens += `<tr><th scope="row"><span class="dot tone-vac"></span>De férias</th>${vacRow}<td class="tot"></td></tr>`;
   let sickRow = '', sickTotal = 0;
   for (let d = 0; d < 7; d++) {
     const n = ids.filter(id => getCell(wk, id, d)?.sick).length;
     sickTotal += n;
     sickRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''}">${n ? `<span class="cov extra">${n}</span>` : '<span class="cov none">—</span>'}</td>`;
   }
-  if (sickTotal && verContagens) foot += `<tr><th scope="row"><span class="dot tone-sick"></span>De baixa</th>${sickRow}<td class="tot"></td></tr>`;
+  if (sickTotal && verContagens) contagens += `<tr><th scope="row"><span class="dot tone-sick"></span>De baixa</th>${sickRow}<td class="tot"></td></tr>`;
   let xoffRow = '', xoffTotal = 0;
   for (let d = 0; d < 7; d++) {
     const n = ids.filter(id => getCell(wk, id, d)?.xoff).length;
     xoffTotal += n;
     xoffRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''}">${n ? `<span class="cov extra">${n}</span>` : '<span class="cov none">—</span>'}</td>`;
   }
-  if (xoffTotal && verContagens) foot += `<tr><th scope="row"><span class="dot tone-xoff"></span>Folga extra do plantão</th>${xoffRow}<td class="tot"></td></tr>`;
+  if (xoffTotal && verContagens) contagens += `<tr><th scope="row"><span class="dot tone-xoff"></span>Folga extra do plantão</th>${xoffRow}<td class="tot"></td></tr>`;
 
   const bad = alerts.filter(a => a.lvl === 'bad').length, warn = alerts.length - bad;
   alerts.sort((a, b) => (a.lvl === b.lvl ? 0 : a.lvl === 'bad' ? -1 : 1));
@@ -2104,7 +2105,7 @@ function renderSchedule() {
     <table class="grid">
       <thead><tr><th scope="col" class="emp">Funcionário</th>${head}<th scope="col">Total</th></tr></thead>
       <tbody>${body}</tbody>
-      <tfoot>${foot}</tfoot>
+      <tfoot>${foot}${contagens}</tfoot>
     </table>
   </div>
   <div class="below">
