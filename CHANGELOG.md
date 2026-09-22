@@ -4,6 +4,11 @@ Cada versão tem um cabeçalho `## versão — data` e uma lista de pontos. A ap
 aos administradores as entradas mais recentes do que a versão instalada quando procura
 atualizações.
 
+## 1.6.6 — 2026-09-22
+- Plantão ao fim de semana: o dia abre das 09:00 às 18:00 com as pessoas do sábado e a noite segue até às 09:00.
+- Noite de serviço até às 09:00, a começar às 18:00 ao fim de semana.
+- Ao fim de semana o mínimo ao balcão conta menos uma pessoa durante o almoço.
+
 ## 1.6.5 — 2026-09-21
 - Gerar a escala só a partir de um dia (botão ↻ em cada dia).
 - Escala separada em balcão, administrativo e extras.
