@@ -4,6 +4,12 @@ Cada versão tem um cabeçalho `## versão — data` e uma lista de pontos. A ap
 aos administradores as entradas mais recentes do que a versão instalada quando procura
 atualizações.
 
+## 1.6.9 — 2026-09-23
+- Ajuste de horas do dia nos dois sentidos, com − e + na célula e horário efetivo à vista.
+- Feriados nacionais, do concelho e personalizados marcados na escala.
+- Menu da célula mais compacto, com ícones coloridos.
+- Gráfico «Ao balcão» com backoffice e extras; contagens opcionais.
+
 ## 1.6.8 — 2026-09-22
 - Backoffice: horário fixo das 09:00 às 18:00 com almoço das 12:00 às 13:00, sempre respeitado pela geração.
 - O menu da célula deixa de fechar a cada escolha — fecha só ao clicar fora.
