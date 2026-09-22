@@ -642,10 +642,11 @@ const DEFAULT_CONFIG = {
     { id: 's10', name: 'Intermédio',       short: '10h', start: '10:00', end: '19:00', lunch: true,  night: false, onlyDuty: false, weekday: 1, weekend: 0, saturday: 0 },
     { id: 's11', name: 'Fecho',            short: '11h', start: '10:30', end: '19:30', lunch: true,  night: false, onlyDuty: false, weekday: 2, weekend: 1, saturday: 1 },
     { id: 'N',   name: 'Noite de serviço', short: 'N',   start: '19:00', end: '09:00', lunch: false, night: true,  onlyDuty: true,  weekday: 1, weekend: 1, saturday: 1 },
+    { id: 'BO',  name: 'Backoffice',        short: 'BO',  start: '09:00', end: '18:00', lunch: true,  night: false, onlyDuty: false, weekday: 0, weekend: 0, saturday: 0, back: true },
   ],
   lunchFrom: '12:00', lunchTo: '16:00', lunchMin: 60, lunchMax: 120, minPresent: 3, minRest: 11,
   /* Quem está em backoffice almoça sempre a esta hora, com a duração mínima. */
-  backLunchAt: '13:00',
+  backLunchAt: '12:00',
   doubleFrom: '22:00', doubleTo: '09:00', doubleFactor: 2,
   dutyAnchorWeek: '2026-09-21', dutyAnchorDay: 0, dutyStep: -1,
   weeklyHours: 40, dayHours: 8, backofficePerDay: 1,

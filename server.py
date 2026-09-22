@@ -48,6 +48,7 @@ DEFAULT_SHIFTS = [
     {"id": "s10", "name": "Intermédio",       "short": "10h", "start": "10:00", "end": "19:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 1, "weekend": 0, "saturday": 0},
     {"id": "s11", "name": "Fecho",            "short": "11h", "start": "10:30", "end": "19:30", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 2, "weekend": 1, "saturday": 1},
     {"id": "N",   "name": "Noite de serviço", "short": "N",   "start": "19:00", "end": "09:00", "lunch": False, "night": True,  "onlyDuty": True,  "weekday": 1, "weekend": 1, "saturday": 1},
+    {"id": "BO",  "name": "Backoffice",        "short": "BO",  "start": "09:00", "end": "18:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 0, "weekend": 0, "saturday": 0, "back": True},
 ]
 
 DEFAULT_SETTINGS = {
@@ -56,7 +57,7 @@ DEFAULT_SETTINGS = {
     "lunchMin": 60,
     "lunchMax": 120,
     # Quem está em backoffice almoça sempre a esta hora, com a duração mínima.
-    "backLunchAt": "13:00",
+    "backLunchAt": "12:00",
     "minPresent": 3,
     "minRest": 11,
     "doubleFrom": "22:00",
@@ -97,7 +98,7 @@ SEED_EMPLOYEES = [
     ("ex4", "Alexandra", "Técnico(a) de farmácia", "#5552C2", 1, 1, [], [], 5, {}, "Exemplo", 0),
     ("ex5", "Fernanda",  "Técnico(a) de farmácia", "#C0622B", 0, 1, [], [], 5, {}, "Exemplo", 0),
     ("ex6", "Filipa",    "Técnico(a) de farmácia", "#3E7F8C", 0, 1, [], [], 5, {}, "Exemplo", 0),
-    ("ex7", "Cátia",     "Administrativo(a)",      "#6B5B95", 0, 0, [], [], 5, {"0": "s9", "1": "s9", "2": "s9", "3": "s9", "4": "s9"}, "Exemplo · backoffice", 1),
+    ("ex7", "Cátia",     "Administrativo(a)",      "#6B5B95", 0, 0, [], [], 5, {"0": "BO", "1": "BO", "2": "BO", "3": "BO", "4": "BO"}, "Exemplo · backoffice", 1),
 ]
 
 SCHEMA = """
@@ -230,21 +231,33 @@ def migrate_night_end() -> None:
     write_setting("_nightEnd09", True)
 
 
+def migrate_back_lunch() -> None:
+    """Uma só vez: o almoço de quem está em backoffice passa a ser às 12:00 (era 13:00)."""
+    if read_setting("_backLunch12"):
+        return
+    if str(read_setting("backLunchAt", "")) == "13:00":
+        write_setting("backLunchAt", "12:00")
+        print("Base de dados: o almoço do backoffice passa a ser às 12:00.")
+    write_setting("_backLunch12", True)
+
+
 def init_data() -> None:
     migrate()
     with lock:
         if not conn.execute("SELECT 1 FROM shifts LIMIT 1").fetchone():
             for i, s in enumerate(DEFAULT_SHIFTS):
                 conn.execute(
-                    "INSERT INTO shifts (id,name,short,start,end,lunch,night,only_duty,weekday,weekend,saturday,position)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO shifts (id,name,short,start,end,lunch,night,only_duty,weekday,weekend,saturday,back,position)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (s["id"], s["name"], s["short"], s["start"], s["end"], int(s["lunch"]),
-                     int(s["night"]), int(s["onlyDuty"]), s["weekday"], s["weekend"], s["saturday"], i),
+                     int(s["night"]), int(s["onlyDuty"]), s["weekday"], s["weekend"], s["saturday"],
+                     int(s.get("back", False)), i),
                 )
         for k, v in DEFAULT_SETTINGS.items():
             conn.execute("INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)", (k, json.dumps(v)))
         conn.commit()
     migrate_night_end()
+    migrate_back_lunch()
     with lock:
         if not conn.execute("SELECT 1 FROM employees LIMIT 1").fetchone():
             for (eid, name, role, color, night, weekend, pref, off, mx, fixed, notes, back) in SEED_EMPLOYEES:

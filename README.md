@@ -214,9 +214,10 @@ exportação e importação em JSON.
   não trabalha ao sábado nem ao domingo.
 - **Backoffice por defeito**: na ficha, marca quem trabalha sempre em backoffice. Os
   turnos dessa pessoa entram logo nesse posto e ela não é escalada ao fim de semana.
-  Para lhe dar um **horário fixo** (ex.: 09:00–17:30), cria em *Turnos* um turno com a
-  opção **Backoffice** (nunca é usado ao balcão nem cortado ao horário de abertura) e,
-  na ficha, aplica-o de segunda a sexta com o botão *Aplicar de seg. a sex.*
+  O horário de backoffice vem definido como um turno próprio — **Backoffice, 09:00–18:00
+  com almoço das 12:00 às 13:00** — marcado em *Turnos* com a opção **Backoffice** (nunca
+  é usado ao balcão nem cortado ao horário de abertura). Na ficha, aplica-o de segunda a
+  sexta com o botão *Aplicar de seg. a sex.*
 - **Extras**: na ficha, marca quem é *extra*. Não tem turnos nem mínimo semanal e a
   geração automática não a escala; em cada dia indicas no menu da célula quantas horas
   fez e, se quiseres, a que horas entrou (para contar no gráfico do balcão). As horas
@@ -269,7 +270,7 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
   cada dia escolhe-se no menu da célula; a geração usa almoços mais longos para acertar as
   horas da semana, em vez de tirar um dia de trabalho a quem fica acima do alvo. **Quem
   está em backoffice almoça sempre à mesma hora** (13:00 por omissão), com a duração
-  mínima.
+  mínima (12:00–13:00 por omissão).
 - **Horas nocturnas**: as horas entre as 22:00 e as 09:00 **não entram nas horas
   trabalhadas** — ficam à parte, na coluna «horas nocturnas», e pagam-se a dobrar. Na
   noite de serviço das 19:00 às 07:00 só as 3 h das 19:00 às 22:00 contam como
