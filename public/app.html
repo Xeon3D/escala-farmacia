@@ -330,7 +330,7 @@ input.timein.bad{border-color:var(--bad);background:var(--bad-bg)}
 .dirty-note{font-size:13px;color:var(--warn)}
 .data-io textarea{width:100%;min-height:120px;border:1px solid var(--line);border-radius:9px;background:var(--bg);padding:10px;font:12px var(--mono);resize:vertical}
 
-.menu{position:absolute;z-index:40;width:330px;max-width:calc(100vw - 32px);background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px;max-height:80vh;overflow:auto}
+.menu{position:absolute;z-index:40;width:405px;max-width:calc(100vw - 32px);background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px;max-height:80vh;overflow:auto}
 .menu-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;font-size:12px;color:var(--ink-3);padding:5px 6px 7px;border-bottom:1px solid var(--line);margin-bottom:3px}
 .menu-head b{color:var(--ink);font-size:13px}
 .menu-head small{display:block;font:11px var(--mono);color:var(--ink-3)}
@@ -1802,7 +1802,13 @@ function userMenuHTML() {
 }
 function render() {
   /* O menu da célula fica aberto enquanto escolhes opções: guarda-se a célula e reabre-se no fim. */
-  const menuKeep = menuCtx ? { id: menuCtx.id, d: menuCtx.d } : null;
+  /* Guarda a posição do menu aberto: ao voltar a desenhá-lo (ajuste de horas, almoço…)
+     fica onde estava, para o rato não perder o botão quando o conteúdo muda de altura. */
+  const menuFocus = menuCtx && menu.contains(document.activeElement) ? document.activeElement.closest('[data-action]') : null;
+  const menuKeep = menuCtx ? {
+    id: menuCtx.id, d: menuCtx.d, left: menu.style.left, top: menu.style.top,
+    focus: menuFocus ? { a: menuFocus.dataset.action, v: menuFocus.dataset.v || '' } : null,
+  } : null;
   closeMenu();
   applyBranding();
   const st = $('#status');
@@ -1842,7 +1848,7 @@ function render() {
   if (focusId && (focusId.startsWith('cfg-') || focusId.startsWith('pref-'))) { const f = document.getElementById(focusId); if (f) f.focus(); }
   if (menuKeep && state.tab === 'horario' && !state.readOnly) {
     const btn = $(`.cell[data-id="${CSS.escape(menuKeep.id)}"][data-d="${menuKeep.d}"]`);
-    if (btn) openMenu(btn);
+    if (btn) openMenu(btn, menuKeep);
   }
 }
 
@@ -2674,7 +2680,7 @@ async function waitForServer(maxMs = 60000) {
 /* ---------- Menu de turno ---------- */
 const menu = $('#menu');
 let menuCtx = null;
-function openMenu(btn) {
+function openMenu(btn, keep) {
   const id = btn.dataset.id, d = +btn.dataset.d, e = state.employees[id], wk = state.week;
   const cur = getCell(wk, id, d);
   /* Estado do dia em ícones (férias, baixa, folga extra, bloqueio), para não gastar uma linha cada. */
@@ -2777,17 +2783,26 @@ function openMenu(btn) {
     ? `${head}<div class="locknote">🔒 Bloqueada — carrega no cadeado para alterar.</div>`
     : `${head}${extraPick}<div class="opts">${opts}</div>${postPick}${lessPick}${dutyPick}${lunch}${e.extra ? '' : bankPick}`;
   menu.hidden = false;
-  const r = btn.getBoundingClientRect();
-  const mw = menu.offsetWidth, mh = menu.offsetHeight;
-  const left = Math.max(16, Math.min(r.left, window.innerWidth - mw - 16));
-  let top = r.bottom + 6;
-  if (top + mh > window.innerHeight - 8 && r.top - mh - 6 > 8) top = r.top - mh - 6;
-  menu.style.left = (left + window.scrollX) + 'px';
-  menu.style.top = (top + window.scrollY) + 'px';
+  if (keep && keep.top) {
+    /* Só a desenhar de novo o mesmo menu: não mexe, senão os botões fogem debaixo do rato. */
+    menu.style.left = keep.left;
+    menu.style.top = keep.top;
+  } else {
+    const r = btn.getBoundingClientRect();
+    const mw = menu.offsetWidth, mh = menu.offsetHeight;
+    const left = Math.max(16, Math.min(r.left, window.innerWidth - mw - 16));
+    let top = r.bottom + 6;
+    if (top + mh > window.innerHeight - 8 && r.top - mh - 6 > 8) top = r.top - mh - 6;
+    menu.style.left = (left + window.scrollX) + 'px';
+    menu.style.top = (top + window.scrollY) + 'px';
+  }
   document.querySelectorAll('.cell.selected').forEach(c => c.classList.remove('selected'));
   btn.classList.add('selected');
   menuCtx = { id, d, btn };
-  (menu.querySelector('.opt.cur') || menu.querySelector('.opt')).focus();
+  const alvo = keep?.focus
+    ? menu.querySelector(`[data-action="${keep.focus.a}"]${keep.focus.v ? `[data-v="${keep.focus.v}"]` : ''}`)
+    : null;
+  (alvo || menu.querySelector('.opt.cur') || menu.querySelector('.opt'))?.focus();
 }
 function closeMenu(refocus) {
   if (menu.hidden) return;
