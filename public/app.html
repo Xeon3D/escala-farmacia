@@ -641,7 +641,7 @@ const DEFAULT_CONFIG = {
     { id: 's9',  name: 'Abertura',         short: '9h',  start: '09:00', end: '18:00', lunch: true,  night: false, onlyDuty: false, weekday: 1, weekend: 2, saturday: 2 },
     { id: 's10', name: 'Intermédio',       short: '10h', start: '10:00', end: '19:00', lunch: true,  night: false, onlyDuty: false, weekday: 1, weekend: 0, saturday: 0 },
     { id: 's11', name: 'Fecho',            short: '11h', start: '10:30', end: '19:30', lunch: true,  night: false, onlyDuty: false, weekday: 2, weekend: 1, saturday: 1 },
-    { id: 'N',   name: 'Noite de serviço', short: 'N',   start: '19:00', end: '07:00', lunch: false, night: true,  onlyDuty: true,  weekday: 1, weekend: 1, saturday: 1 },
+    { id: 'N',   name: 'Noite de serviço', short: 'N',   start: '19:00', end: '09:00', lunch: false, night: true,  onlyDuty: true,  weekday: 1, weekend: 1, saturday: 1 },
   ],
   lunchFrom: '12:00', lunchTo: '16:00', lunchMin: 60, minPresent: 3, minRest: 11,
   doubleFrom: '22:00', doubleTo: '09:00', doubleFactor: 2,
@@ -656,6 +656,8 @@ const DEFAULT_CONFIG = {
   updateCheck: 'week',
   /* Sábado: quantas pessoas são precisas (a farmácia só abre de manhã). */
   saturdayPeople: 2,
+  /* A noite de serviço ao fim de semana começa mais cedo do que nos dias úteis. */
+  nightWeekendStart: '18:00',
 };
 const UPDATE_CHECK_OPTS = [['off', 'Nunca'], ['6h', 'A cada 6 horas'], ['12h', 'A cada 12 horas'], ['24h', 'Todos os dias'], ['week', 'Todas as semanas'], ['month', 'Todos os meses']];
 /* Códigos da primeira versão (Manhã/Tarde) lidos como os turnos atuais */
@@ -780,21 +782,40 @@ function dutyDay(wk) {
   return (((+C.dutyAnchorDay || 0) - weeks * step) % 7 + 700) % 7;
 }
 /* ---------- Horário da farmácia ---------- */
-function openingOf(d) {
+/** Horário do dia tal como está definido, sem ter em conta o plantão. */
+function openingRaw(d) {
   const o = (Array.isArray(cfg().opening) ? cfg().opening : [])[d] || {};
   const open = validTime(o.open) ? o.open : '09:00', close = validTime(o.close) ? o.close : '20:00';
   return { open, close, closed: !!o.closed };
 }
+/** Horário típico de um dia útil (o primeiro de segunda a sexta que esteja aberto). */
+function weekdayOpening() {
+  for (let d = 0; d < 5; d++) { const o = openingRaw(d); if (!o.closed) return o; }
+  return { open: '09:00', close: '19:30', closed: false };
+}
+/** Quando o plantão calha ao fim de semana, a farmácia abre nesse dia com o horário de um dia útil. */
+const dutyWeekend = (wk = state.week) => dutyDay(wk) >= 5;
+function openingOf(d, wk = state.week) {
+  d = ((d % 7) + 7) % 7;
+  if (d >= 5 && d === dutyDay(wk)) return weekdayOpening();
+  return openingRaw(d);
+}
 /* Num dia fechado só trabalha quem faz o turno de plantão. */
-const isClosed = d => openingOf(d).closed;
+const isClosed = (d, wk = state.week) => openingOf(d, wk).closed;
 /** Turno tal como se faz nesse dia da semana: cortado ao horário de abertura da farmácia.
  *  Os turnos «só no plantão» e noturnos não são cortados (a noite de serviço atravessa o fecho). */
-function shiftOn(sh, d) {
-  if (!sh || sh.onlyDuty || sh.night || sh.back) return sh;
+function shiftOn(sh, d, wk = state.week) {
+  if (!sh) return sh;
   d = ((d % 7) + 7) % 7;
-  const o = openingOf(d);
+  /* A noite de serviço ao fim de semana começa mais cedo. */
+  if (sh.night) {
+    const inicio = normalizeTime(cfg().nightWeekendStart) || DEFAULT_CONFIG.nightWeekendStart;
+    return d >= 5 && inicio !== sh.start ? { ...sh, start: inicio, weekendNight: true } : sh;
+  }
+  if (sh.onlyDuty || sh.back) return sh;
+  const o = openingOf(d, wk);
   if (o.closed) return sh;
-  const [a, b] = span(sh), [oa, ob] = openSpan(d);
+  const [a, b] = span(sh), [oa, ob] = openSpan(d, wk);
   const s = Math.max(a, oa), e = Math.min(b, ob);
   if (e <= s || (s === a && e === b)) return sh; // sem sobreposição (fica o aviso) ou já dentro do horário
   const cut = { ...sh, start: fmtMin(s), end: fmtMin(e), clipped: true };
@@ -804,22 +825,22 @@ function shiftOn(sh, d) {
   return cut;
 }
 /** O turno chega a apanhar o horário de abertura desse dia? */
-function shiftFits(sh, d) {
+function shiftFits(sh, d, wk = state.week) {
   if (!sh) return false;
   if (sh.onlyDuty || sh.night) return true;
-  if (openingOf(d).closed) return false;
+  if (openingOf(d, wk).closed) return false;
   if (sh.back) return true;
-  const [a, b] = span(sh), [oa, ob] = openSpan(d);
+  const [a, b] = span(sh), [oa, ob] = openSpan(d, wk);
   return Math.min(b, ob) > Math.max(a, oa);
 }
 /* Intervalo de abertura em minutos; se fechar depois da meia-noite, o fim passa das 24h. */
-function openSpan(d) {
-  const o = openingOf(d), a = toMin(o.open); let b = toMin(o.close); if (b <= a) b += 1440;
+function openSpan(d, wk = state.week) {
+  const o = openingOf(d, wk), a = toMin(o.open); let b = toMin(o.close); if (b <= a) b += 1440;
   return [a, b];
 }
 /** Resume o horário da semana agrupando dias seguidos com o mesmo horário: «Seg–Sex 09:00–20:00 · Dom fechada». */
 function openingSummary() {
-  const key = d => { const o = openingOf(d); return o.closed ? 'fechada' : `${o.open}–${o.close}`; };
+  const key = d => { const o = openingRaw(d); return o.closed ? 'fechada' : `${o.open}–${o.close}`; };
   const groups = [];
   for (let d = 0; d < 7; d++) {
     const k = key(d), g = groups[groups.length - 1];
@@ -1030,12 +1051,12 @@ function getCell(wk, id, d) {
   if (d > 6) { wk = shiftWeek(wk, 1); d -= 7; }
   const raw = state.schedules[wk]?.cells?.[id]?.[d];
   if (!raw) return null;
-  if (typeof raw === 'string') return raw ? { s: raw, sh: shiftOn(shiftById(raw), d), l: '', pay: '', bank: 0, post: '', vac: false, sick: false, xoff: false, lock: false, hrs: 0, from: '', less: 0 } : null;
+  if (typeof raw === 'string') return raw ? { s: raw, sh: shiftOn(shiftById(raw), d, wk), l: '', pay: '', bank: 0, post: '', vac: false, sick: false, xoff: false, lock: false, hrs: 0, from: '', less: 0 } : null;
   const s = raw.s || '', bank = +raw.bank || 0, vac = !!raw.vac, sick = !vac && !!raw.sick, xoff = !vac && !sick && !!raw.xoff, hrs = s ? 0 : Math.max(0, +raw.hrs || 0);
   const lock = !!raw.lock; // bloqueada: nada a altera até ser desbloqueada (pode ser uma folga bloqueada)
   if (!s && !bank && !vac && !sick && !xoff && !hrs && !lock) return null;
   return {
-    s, sh: s ? shiftOn(shiftById(s), d) : null, l: raw.l || '', bank, vac, sick, xoff, lock,
+    s, sh: s ? shiftOn(shiftById(s), d, wk) : null, l: raw.l || '', bank, vac, sick, xoff, lock,
     pay: raw.pay === 'bank' ? 'bank' : '', post: raw.post === 'back' ? 'back' : '',
     /* Extras: horas feitas nesse dia e, se souberes, a hora a que entrou. Turnos: horas a menos (chegou tarde / saiu cedo). */
     hrs, from: validTime(raw.from) ? raw.from : '', less: s ? Math.max(0, +raw.less || 0) : 0,
@@ -1222,7 +1243,7 @@ function cellIssues(e, id, wk, d, cell, lookup = getCell, both = false) {
   if (!sh && cell.hrs) {
     if (!e.extra) out.push({ lvl: 'warn', msg: 'Horas avulsas numa pessoa que não está marcada como extra' });
     if ((e.daysOff || []).includes(d)) out.push({ lvl: 'info', msg: 'Dia marcado como indisponível' });
-    if (isClosed(d)) out.push({ lvl: 'warn', msg: 'A farmácia está fechada neste dia' });
+    if (isClosed(d, wk)) out.push({ lvl: 'warn', msg: 'A farmácia está fechada neste dia' });
     return out;
   }
   if (!sh) { out.push({ lvl: 'bad', msg: 'Este turno já não existe — escolhe outro' }); return out; }
@@ -1231,8 +1252,8 @@ function cellIssues(e, id, wk, d, cell, lookup = getCell, both = false) {
   else if (cell.post === 'back' && d >= 5) out.push({ lvl: 'warn', msg: 'O backoffice não trabalha ao fim de semana' });
   if (e.extra) out.push({ lvl: 'info', msg: 'Pessoa extra com um turno completo — podes antes indicar só as horas que fez' });
   if (cell.pay === 'bank' && d !== dutyDay(wk)) out.push({ lvl: 'warn', msg: 'Só as horas do dia de plantão podem ir para o banco' });
-  if (!sh.onlyDuty && !sh.night && isClosed(d)) out.push({ lvl: 'bad', msg: 'A farmácia está fechada neste dia — só há o turno de plantão' });
-  else if (!shiftFits(sh, d)) out.push({ lvl: 'bad', msg: `Turno fora do horário de abertura (${openingOf(d).open}–${openingOf(d).close})` });
+  if (!sh.onlyDuty && !sh.night && isClosed(d, wk)) out.push({ lvl: 'bad', msg: 'A farmácia está fechada neste dia — só há o turno de plantão' });
+  else if (!shiftFits(sh, d, wk)) out.push({ lvl: 'bad', msg: `Turno fora do horário de abertura (${openingOf(d, wk).open}–${openingOf(d, wk).close})` });
   else if (sh.clipped) out.push({ lvl: 'info', msg: `Termina às ${sh.end}: a farmácia fecha a essa hora` });
   if (cell.post === 'back' && sh.night) out.push({ lvl: 'warn', msg: 'A noite de serviço não é trabalho de backoffice' });
   if (sh.night && !e.acceptsNight) out.push({ lvl: 'bad', msg: 'Não faz turnos noturnos' });
@@ -1291,7 +1312,9 @@ function lunchesOn(wk, d, exceptId) {
 /* ---------- Presença ao balcão ---------- */
 /** Mínimo de pessoas ao balcão a uma dada hora (em minutos), tendo em conta os períodos com outro mínimo. */
 /** Ao sábado o mínimo ao balcão é o número de pessoas previstas para o sábado; nos outros dias, o geral e as faixas. */
-const minFor = (d, t) => (((d % 7) + 7) % 7 === 5 ? saturdayPeople() : minAt(t));
+/* Ao sábado o mínimo é o número de pessoas do sábado — exceto se o plantão calhar nesse dia,
+   em que a farmácia abre como num dia útil e vale o mínimo geral. */
+const minFor = (d, t, wk = state.week) => (((d % 7) + 7) % 7 === 5 && dutyDay(wk) !== 5 ? saturdayPeople() : minAt(t));
 function minAt(t) {
   const C = cfg(), tt = ((t % 1440) + 1440) % 1440;
   for (const b of (Array.isArray(C.presenceBands) ? C.presenceBands : [])) {
@@ -1304,9 +1327,9 @@ function minAt(t) {
 }
 function presence(wk, d, ids) {
   const C = cfg();
-  if (isClosed(d)) return null;
+  if (isClosed(d, wk)) return null;
   /* O gráfico cobre o horário de abertura da farmácia nesse dia, meia hora a meia hora. */
-  const [from, to] = openSpan(d);
+  const [from, to] = openSpan(d, wk);
   const ranges = [];
   for (const id of ids) {
     const c = getCell(wk, id, d), p = getCell(wk, id, d - 1);
@@ -1318,7 +1341,7 @@ function presence(wk, d, ids) {
   const slots = [];
   for (let t = from; t < to; t += 30) {
     const aqui = presentes(t);
-    slots.push({ t, n: aqui.filter(r => !r.back).length, back: aqui.filter(r => r.back).length, min: minFor(d, t) });
+    slots.push({ t, n: aqui.filter(r => !r.back).length, back: aqui.filter(r => r.back).length, min: minFor(d, t, wk) });
   }
   return { from, to, slots };
 }
@@ -1338,7 +1361,7 @@ function generate(wk, fromDay = 0) {
   const lookup = (w, id, d) => {
     if (w !== wk || d < 0 || d > 6) return getCell(w, id, d);
     const r = cells[id]?.[d];
-    return r ? { s: r.s, sh: shiftOn(shiftById(r.s), d), l: r.l || '' } : null;
+    return r ? { s: r.s, sh: shiftOn(shiftById(r.s), d, wk), l: r.l || '' } : null;
   };
   const count = {}, nights = {}, hours = {};
   ids.forEach(id => {
@@ -1363,12 +1386,12 @@ function generate(wk, fromDay = 0) {
   /* Para o plantão, o dia seguinte noutra semana não conta: essa semana é gerada (ou regenerada) depois. */
   const lookupSemana = (w, id, dd) => (dd > 6 ? null : lookup(w, id, dd));
   const hardOk = (id, d, sid, look = lookup) => {
-    const e = state.employees[id], sh = shiftOn(shiftById(sid), d);
+    const e = state.employees[id], sh = shiftOn(shiftById(sid), d, wk);
     if (!sh) return false;
     return !cellIssues(e, id, wk, d, { s: sid, sh, l: '' }, look, true).some(i => i.lvl === 'bad');
   };
   const put = (id, d, sid) => {
-    const sh = shiftOn(shiftById(sid), d);
+    const sh = shiftOn(shiftById(sid), d, wk);
     cells[id][d] = { s: sid }; count[id]++; hours[id] += hoursOf(sh, '').normal;
     if ((state.employees[id].backoffice || sh.back) && !sh.night) cells[id][d].post = 'back';
     if (sh.night) nights[id]++;
@@ -1386,7 +1409,7 @@ function generate(wk, fromDay = 0) {
     if (cells[id][d]) continue;
     const fx = normId(state.employees[id].fixed?.[d]);
     const sh = shiftById(fx);
-    if (!sh || (sh.onlyDuty && needFor(sh, d, wk) === 0) || (!sh.onlyDuty && !sh.night && !shiftFits(sh, d))) continue;
+    if (!sh || (sh.onlyDuty && needFor(sh, d, wk) === 0) || (!sh.onlyDuty && !sh.night && !shiftFits(sh, d, wk))) continue;
     if (hardOk(id, d, fx)) put(id, d, fx);
   }
   /* 2. Folga extra pela noite de fim de semana da semana anterior: no primeiro dia livre a seguir à folga obrigatória. */
@@ -1416,12 +1439,12 @@ function generate(wk, fromDay = 0) {
   }
   /* Turno de dia que melhor cobre a abertura de um dia (o que apanha mais tempo aberto; empate → mais cedo). */
   const bestFor = d => {
-    const [oa, ob] = openSpan(d);
-    return dayShifts.filter(sh => shiftFits(sh, d)).map(sh => { const [a, b] = span(sh); return { sh, cover: Math.min(b, ob) - Math.max(a, oa) }; })
+    const [oa, ob] = openSpan(d, wk);
+    return dayShifts.filter(sh => shiftFits(sh, d, wk)).map(sh => { const [a, b] = span(sh); return { sh, cover: Math.min(b, ob) - Math.max(a, oa) }; })
       .sort((x, y) => y.cover - x.cover || toMin(x.sh.start) - toMin(y.sh.start))[0]?.sh || null;
   };
   /* 4. Sábado: só as pessoas previstas, a rodar por quem fez menos sábados. */
-  if (!isClosed(5) && dayShifts.length && !frozen(5)) {
+  if (!isClosed(5, wk) && dd !== 5 && dayShifts.length && !frozen(5)) {
     const want = saturdayPeople();
     let have = ids.filter(id => cells[id][5]?.s && !shiftById(cells[id][5].s)?.night).length;
     const sh = bestFor(5);
@@ -1434,13 +1457,15 @@ function generate(wk, fromDay = 0) {
   }
   /* 5. Segunda a sexta: cada pessoa trabalha os dias que faltam para as suas horas; quando tem dias a mais,
         folga nos dias com mais gente, para os dias ficarem equilibrados. Aqui só se decide QUEM trabalha em cada dia. */
+  /* Um plantão ao fim de semana abre como dia útil: esse dia entra na distribuição normal. */
+  const diasUteis = [0, 1, 2, 3, 4].concat(dd >= 5 ? [dd] : []);
   if (dayShifts.length) {
     const headcount = d => ids.filter(id => cells[id][d]?.s && !shiftById(cells[id][d].s)?.night).length;
     const order = ids.slice().sort((a, b) => (target(a) - hours[a]) - (target(b) - hours[b])).reverse(); // quem tem mais horas em falta primeiro
     for (const id of order) {
       const falta = target(id) - hours[id];
       if (falta <= 0.01) continue;
-      const livres = [0, 1, 2, 3, 4].filter(d => !frozen(d) && !cells[id][d] && !isClosed(d) && dayShifts.some(sh => hardOk(id, d, sh.id)));
+      const livres = diasUteis.filter(d => !frozen(d) && !cells[id][d] && !isClosed(d, wk) && dayShifts.some(sh => hardOk(id, d, sh.id)));
       const precisa = Math.min(livres.length, Math.ceil(falta / dayHours() - 1e-9));
       /* Escolhe os dias com menos gente (empate: por ordem da semana). */
       const escolha = livres.slice().sort((a, b) => headcount(a) - headcount(b) || a - b).slice(0, precisa);
@@ -1455,8 +1480,8 @@ function generate(wk, fromDay = 0) {
         possível ao longo da abertura, sem descer do mínimo de cada faixa. */
   const cellsLookup = (w, i, x) => lookup(w, i, x);
   for (let d = fromDay; d < 7; d++) {
-    if (isClosed(d) || dayShifts.length < 2) continue;
-    const [oa, ob] = openSpan(d);
+    if (isClosed(d, wk) || dayShifts.length < 2) continue;
+    const [oa, ob] = openSpan(d, wk);
     const workers = ids.filter(id => cells[id][d]?.s && !held(id, d) && !shiftById(cells[id][d].s)?.night && !shiftById(cells[id][d].s)?.onlyDuty && !shiftById(cells[id][d].s)?.back && !normId(state.employees[id].fixed?.[d]));
     const others = ids.filter(id => cells[id][d]?.s && !workers.includes(id) && !shiftById(cells[id][d].s)?.night);
     if (workers.length < 2 && !others.length) continue;
@@ -1465,8 +1490,8 @@ function generate(wk, fromDay = 0) {
       const out = [];
       for (let t = oa; t < ob; t += 30) {
         let n = 0;
-        for (const id of [...workers, ...others]) { if (isBack(id)) continue; const sh = shiftOn(shiftById(cells[id][d].s), d); const [a, b] = span(sh); if (a <= t && t < b) n++; }
-        out.push({ n, min: minFor(d, t) });
+        for (const id of [...workers, ...others]) { if (isBack(id)) continue; const sh = shiftOn(shiftById(cells[id][d].s), d, wk); const [a, b] = span(sh); if (a <= t && t < b) n++; }
+        out.push({ n, min: minFor(d, t, wk) });
       }
       return out;
     };
@@ -1477,14 +1502,14 @@ function generate(wk, fromDay = 0) {
       for (const id of workers) {
         let best = { sid: cells[id][d].s, cost: cur };
         for (const sh of dayShifts) {
-          if (sh.id === cells[id][d].s || !shiftFits(sh, d)) continue;
+          if (sh.id === cells[id][d].s || !shiftFits(sh, d, wk)) continue;
           const prev = cells[id][d].s; cells[id][d].s = sh.id;
           const ok = hardOk(id, d, sh.id, cellsLookup);
           const k = ok ? cost() : Infinity; cells[id][d].s = prev;
           if (k < best.cost - 1e-9) best = { sid: sh.id, cost: k };
         }
         if (best.sid !== cells[id][d].s) {
-          const prevSh = shiftOn(shiftById(cells[id][d].s), d), newSh = shiftOn(shiftById(best.sid), d);
+          const prevSh = shiftOn(shiftById(cells[id][d].s), d, wk), newSh = shiftOn(shiftById(best.sid), d, wk);
           hours[id] += hoursOf(newSh, '').normal - hoursOf(prevSh, '').normal;
           cells[id][d].s = best.sid; cur = best.cost; improved = true;
         }
@@ -1506,9 +1531,9 @@ function generate(wk, fromDay = 0) {
     }
     const taken = [];
     ids.filter(id => held(id, d) && cells[id][d].l).forEach(id => taken.push(toMin(cells[id][d].l)));
-    ids.filter(id => shiftOn(shiftById(cells[id][d]?.s), d)?.lunch && !held(id, d))
+    ids.filter(id => shiftOn(shiftById(cells[id][d]?.s), d, wk)?.lunch && !held(id, d))
       .sort((a, b) => toMin(shiftById(cells[a][d].s).start) - toMin(shiftById(cells[b][d].s).start))
-      .forEach(id => { const l = pickLunch(shiftOn(shiftById(cells[id][d].s), d), taken); if (l) { cells[id][d].l = l; taken.push(toMin(l)); } });
+      .forEach(id => { const l = pickLunch(shiftOn(shiftById(cells[id][d].s), d, wk), taken); if (l) { cells[id][d].l = l; taken.push(toMin(l)); } });
   }
   return cells;
 }
@@ -1655,7 +1680,7 @@ function renderSchedule() {
   const C = cfg(), wk = state.week, mon = parseISO(wk), ids = sortedIds();
   const days = [...Array(7)].map((_, i) => addDays(mon, i));
   const today = iso(new Date()), duty = dutyDay(wk);
-  const closed = [...Array(7)].map((_, d) => isClosed(d));
+  const closed = [...Array(7)].map((_, d) => isClosed(d, wk));
   const hasSched = ids.some(id => Object.keys(state.schedules[wk]?.cells?.[id] || {}).length);
   const alerts = [];
   let body = '', totalWork = 0, totalApart = 0;
@@ -1744,7 +1769,7 @@ function renderSchedule() {
     foot += `<tr><th scope="row"><span class="dot ${toneOf(sh)}"></span>${esc(sh.name)}<small>${sh.start}–${sh.end}${sh.onlyDuty ? ' · só no plantão' : ''}</small></th>${tds}<td class="tot"></td></tr>`;
   }
   /* Sábado: só abre de manhã e precisa de um número fixo de pessoas. */
-  if (hasSched && !closed[5]) {
+  if (hasSched && !closed[5] && duty !== 5) {
     const sat = ids.filter(id => { const c = getCell(wk, id, 5); return worksOn(c) && !c.sh?.night; }).length, want = saturdayPeople();
     if (sat !== want) alerts.push({ lvl: sat < want ? 'bad' : 'warn', who: 'Sábado', when: `${DAYS[5]} ${days[5].getDate()}`, msg: `${sat} ${sat === 1 ? 'pessoa' : 'pessoas'} escaladas, ${want} ${want === 1 ? 'prevista' : 'previstas'}` });
   }
@@ -1819,7 +1844,7 @@ function renderSchedule() {
   const bad = alerts.filter(a => a.lvl === 'bad').length, warn = alerts.length - bad;
   alerts.sort((a, b) => (a.lvl === b.lvl ? 0 : a.lvl === 'bad' ? -1 : 1));
 
-  const head = days.map((dt, d) => `<th scope="col" class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''} ${iso(dt) === today ? 'today' : ''}" title="${closed[d] ? 'Farmácia fechada' : `Aberta ${openingOf(d).open}–${openingOf(d).close}`}">${DAYS[d]}<b>${dt.getDate()}</b>${d === duty ? '<span class="duty-tag">plantão</span>' : ''}${closed[d] ? '<span class="closed-tag">fechada</span>' : ''}${d > 0 && !state.readOnly && ids.length ? `<button class="regen" data-action="generate-from" data-d="${d}" title="Gerar nova escala só a partir de ${DAYS_LONG[d].toLowerCase()} ${dt.getDate()} (os dias anteriores ficam como estão)" aria-label="Gerar a partir de ${DAYS_LONG[d]}">↻</button>` : ''}</th>`).join('');
+  const head = days.map((dt, d) => `<th scope="col" class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''} ${iso(dt) === today ? 'today' : ''}" title="${closed[d] ? 'Farmácia fechada' : `Aberta ${openingOf(d, wk).open}–${openingOf(d, wk).close}`}">${DAYS[d]}<b>${dt.getDate()}</b>${d === duty ? '<span class="duty-tag">plantão</span>' : ''}${closed[d] ? '<span class="closed-tag">fechada</span>' : ''}${d > 0 && !state.readOnly && ids.length ? `<button class="regen" data-action="generate-from" data-d="${d}" title="Gerar nova escala só a partir de ${DAYS_LONG[d].toLowerCase()} ${dt.getDate()} (os dias anteriores ficam como estão)" aria-label="Gerar a partir de ${DAYS_LONG[d]}">↻</button>` : ''}</th>`).join('');
   const ro = state.readOnly ? 'disabled' : '';
   const shiftsTxt = sortedShifts().map(s => {
     const h = hoursOf(s, '');
@@ -1869,7 +1894,7 @@ function renderSchedule() {
       <h2>Regras da escala</h2>
       <dl>
         ${shiftsTxt}
-        <dt>Horário</dt><dd>${esc(openingSummary())}. Os turnos terminam à hora de fecho; num dia fechado só trabalha o plantão</dd>
+        <dt>Horário</dt><dd>${esc(openingSummary())}. Os turnos terminam à hora de fecho; num dia fechado só trabalha o plantão. Quando o plantão calha ao fim de semana, esse dia abre com o horário de um dia útil (${weekdayOpening().open}–${weekdayOpening().close})</dd>
         <dt>Plantão</dt><dd>${DAYS_LONG[duty]} nesta semana; recua ${C.dutyStep === 1 ? 'um dia' : `${C.dutyStep} dias`} por semana</dd>
         <dt>Horas nocturnas</dt><dd>Entre ${C.doubleFrom} e ${C.doubleTo} não contam como trabalhadas: são horas nocturnas, pagas à parte ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}. Quem faz a noite de serviço soma só ${fmtH(hoursOf(cfg().shifts.find(x => x.night) || { start: '19:00', end: '22:00' }, '').normal)} h à semana</dd>
         <dt>Almoço</dt><dd>${C.lunchMin} min, a começar entre ${C.lunchFrom} e ${fmtMin(toMin(C.lunchTo) - C.lunchMin)}</dd>
@@ -1878,7 +1903,7 @@ function renderSchedule() {
         <dt>Descanso</dt><dd>Mínimo de ${C.minRest} h entre o fim de um turno e o início do seguinte</dd>
         <dt>Semana</dt><dd>${fmtH(+C.weeklyHours || 0)} h por pessoa, salvo valor próprio na ficha. Horas descontadas do banco contam para este mínimo</dd>
         <dt>Backoffice</dt><dd>Não trabalha ao sábado nem ao domingo. Quem é de backoffice por defeito entra sempre nesse posto</dd>
-        <dt>Noite de serviço</dt><dd>Folga obrigatória no dia seguinte. Ao sábado ou domingo dá ainda uma folga extra, marcada na semana seguinte no primeiro dia livre depois do plantão — nunca antes (desconta ${fmtH(dayHours())} h ao mínimo dessa semana)</dd>
+        <dt>Noite de serviço</dt><dd>${(() => { const n = cfg().shifts.find(x => x.night); return n ? `${n.start}–${n.end} nos dias úteis e ${esc(cfg().nightWeekendStart || DEFAULT_CONFIG.nightWeekendStart)}–${n.end} ao fim de semana. ` : ''; })()}Folga obrigatória no dia seguinte. Ao sábado ou domingo dá ainda uma folga extra, marcada na semana seguinte no primeiro dia livre depois do plantão — nunca antes (desconta ${fmtH(dayHours())} h ao mínimo dessa semana)</dd>
         <dt>Banco de horas</dt><dd>As horas acima do mínimo da semana vão para o banco. No dia de plantão escolhes se as horas normais são pagas ou vão para o banco; as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte. Descontar ${fmtH(dayHours())} h num dia equivale a uma folga</dd>
       </dl>
       <p>Clica numa célula para escolher o turno e a hora de almoço. Para mudar horários, plantão e cobertura, <button class="linkbtn" data-action="tab" data-tab="turnos">edita os turnos</button>.</p>
@@ -1891,7 +1916,7 @@ function renderCounter() {
   const C = cfg(), wk = state.week, mon = parseISO(wk), ids = sortedIds();
   const days = [...Array(7)].map((_, i) => addDays(mon, i));
   const duty = dutyDay(wk), today = iso(new Date()), lm = +C.lunchMin || 60;
-  const open = [...Array(7)].map((_, d) => (isClosed(d) ? null : openSpan(d)));
+  const open = [...Array(7)].map((_, d) => (isClosed(d, wk) ? null : openSpan(d, wk)));
   const from = Math.min(...open.filter(Boolean).map(o => o[0]), 24 * 60), to = Math.max(...open.filter(Boolean).map(o => o[1]), 0);
   /* Quem está presente num dia entre t e t+60: turnos de dia (já cortados ao horário) e extras com hora de entrada. */
   const people = (d, t) => {
@@ -1916,7 +1941,7 @@ function renderCounter() {
       if (!open[d] || t + 60 <= open[d][0] || t >= open[d][1]) { tds += '<td class="shut">—</td>'; continue; }
       const ps = people(d, t);
       const atCounter = ps.filter(p => !p.back && !p.lunchAll).length;
-      const min = Math.min(minFor(d, t), minFor(d, t + 30));
+      const min = Math.min(minFor(d, t, wk), minFor(d, t + 30, wk));
       const chips = ps.sort((a, b) => (a.back - b.back) || a.e.name.localeCompare(b.e.name, 'pt')).map(p =>
         `<span class="${p.back ? 'back' : ''} ${p.lunchAll ? 'lunch' : ''}" title="${esc(p.e.name)}${p.back ? ' · backoffice' : ''}${p.l !== null ? ` · almoço ${fmtMin(p.l)}–${fmtMin(p.l + lm)}` : ''}"><i style="background:${esc(p.e.color || COLORS[0])}"></i>${esc(p.e.name.split(' ')[0])}${p.lunchPart ? ' <small>🍴</small>' : ''}${p.back ? ' <small>back</small>' : ''}</span>`).join('');
       const low = atCounter < min;
@@ -2235,6 +2260,7 @@ function renderSettings() {
         <div><button class="btn" data-action="band-add" ${ro}>Adicionar período</button></div>
         <small>Ex.: das 12:00 às 16:00 chegam 2 pessoas ao balcão. Fora destes períodos vale o mínimo geral.</small>
       </div>
+      <div class="field-inline"><label for="cfg-nightWeekendStart">Noite ao fim de semana começa às</label>${timeInput('cfg-nightWeekendStart', c.nightWeekendStart, 'Hora de início da noite de serviço ao fim de semana', 'data-cfg="rule" data-k="nightWeekendStart"', ro)}<small>Ao sábado e ao domingo a noite de serviço começa a esta hora; nos dias úteis vale a hora do turno</small></div>
       <div class="field-inline"><label for="cfg-saturdayPeople">Pessoas ao sábado</label><input type="number" id="cfg-saturdayPeople" data-cfg="rule" data-k="saturdayPeople" value="${+c.saturdayPeople || 0}" min="0" max="20" ${ro}><small>Quantas pessoas a geração escala ao sábado; é também o mínimo ao balcão nesse dia (o mínimo geral não se aplica)</small></div>
       <div class="field-inline"><label for="cfg-backofficePerDay">Backoffice por dia</label><input type="number" id="cfg-backofficePerDay" data-cfg="rule" data-k="backofficePerDay" value="${+c.backofficePerDay || 0}" min="0" max="10" ${ro}><small>Pessoas fora do balcão, que podem reforçar nas horas de ponta</small></div>
       <div class="field-inline"><label for="cfg-weeklyHours">Horas por semana</label><input type="number" id="cfg-weeklyHours" data-cfg="rule" data-k="weeklyHours" value="${+c.weeklyHours || 0}" min="0" max="80" step="0.5" ${ro}><small>Mínimo de cada pessoa, salvo valor próprio na ficha</small></div>
@@ -2396,7 +2422,7 @@ function openMenu(btn) {
   }
   /* Horários de backoffice só aparecem a quem é de backoffice (ou se já for o turno da célula). */
   const menuShifts = sortedShifts().filter(x => !x.back || e.backoffice || cur?.sh?.id === x.id);
-  const opts = (e.extra ? [null] : [...menuShifts.map(x => shiftOn(x, d)), null]).map(sh => {
+  const opts = (e.extra ? [null] : [...menuShifts.map(x => shiftOn(x, d, wk)), null]).map(sh => {
     const iss = sh ? cellIssues(e, id, wk, d, { s: sh.id, sh, l: cur?.sh?.id === sh.id ? cur.l : '' }, getCell, true).filter(i => i.msg !== 'Sem hora de almoço marcada') : [];
     const w = worstOf(iss), isCur = sh ? cur?.sh?.id === sh.id : !cur || (!cur.sh && !cur.hrs && !cur.bank && !cur.vac && !cur.sick && !cur.xoff);
     const h = sh ? hoursOf(sh, '') : null;
@@ -2490,7 +2516,7 @@ function writeCell(id, d, value, force = false) {
 }
 function setShift(id, d, sid) {
   if (!sid) return writeCell(id, d, null);
-  const sh = shiftOn(shiftById(sid), d), cur = getCell(state.week, id, d);
+  const sh = shiftOn(shiftById(sid), d, state.week), cur = getCell(state.week, id, d);
   const v = { s: sid };
   if (sh?.lunch) v.l = cur?.sh?.id === sid && cur.l ? cur.l : pickLunch(sh, lunchesOn(state.week, d, id));
   if (cur?.pay === 'bank' && d === dutyDay(state.week)) v.pay = 'bank';
@@ -2982,7 +3008,7 @@ document.addEventListener('click', async ev => {
       c.dutyAnchorDay = Math.min(6, Math.max(0, +c.dutyAnchorDay || 0));
       c.dutyStep = Number.isFinite(+c.dutyStep) ? +c.dutyStep : 1;
       c.dutyAnchorWeek = iso(mondayOf(parseISO(/^\d{4}-\d{2}-\d{2}$/.test(c.dutyAnchorWeek) ? c.dutyAnchorWeek : DEFAULT_CONFIG.dutyAnchorWeek)));
-      ['lunchFrom', 'lunchTo', 'doubleFrom', 'doubleTo'].forEach(k => { c[k] = normalizeTime(c[k]) || cfg()[k]; });
+      ['lunchFrom', 'lunchTo', 'doubleFrom', 'doubleTo', 'nightWeekendStart'].forEach(k => { c[k] = normalizeTime(c[k]) || cfg()[k] || DEFAULT_CONFIG[k]; });
       c.presenceBands = (Array.isArray(c.presenceBands) ? c.presenceBands : [])
         .map(b => ({ from: normalizeTime(b.from) || '', to: normalizeTime(b.to) || '', min: Math.max(0, Math.min(20, +b.min || 0)) }));
       c.opening = [...Array(7)].map((_, d) => {

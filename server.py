@@ -47,7 +47,7 @@ DEFAULT_SHIFTS = [
     {"id": "s9",  "name": "Abertura",         "short": "9h",  "start": "09:00", "end": "18:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 1, "weekend": 2, "saturday": 2},
     {"id": "s10", "name": "Intermédio",       "short": "10h", "start": "10:00", "end": "19:00", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 1, "weekend": 0, "saturday": 0},
     {"id": "s11", "name": "Fecho",            "short": "11h", "start": "10:30", "end": "19:30", "lunch": True,  "night": False, "onlyDuty": False, "weekday": 2, "weekend": 1, "saturday": 1},
-    {"id": "N",   "name": "Noite de serviço", "short": "N",   "start": "19:00", "end": "07:00", "lunch": False, "night": True,  "onlyDuty": True,  "weekday": 1, "weekend": 1, "saturday": 1},
+    {"id": "N",   "name": "Noite de serviço", "short": "N",   "start": "19:00", "end": "09:00", "lunch": False, "night": True,  "onlyDuty": True,  "weekday": 1, "weekend": 1, "saturday": 1},
 ]
 
 DEFAULT_SETTINGS = {
@@ -78,6 +78,8 @@ DEFAULT_SETTINGS = {
     "updateCheck": "week",
     # Pessoas escaladas ao sábado (a farmácia só abre de manhã).
     "saturdayPeople": 2,
+    # A noite de serviço ao fim de semana começa a esta hora (nos dias úteis vale a hora do turno).
+    "nightWeekendStart": "18:00",
 }
 UPDATE_INTERVALS = {"off": 0, "6h": 6 * 3600, "12h": 12 * 3600, "24h": 86400, "week": 7 * 86400, "month": 30 * 86400}
 LOGO_RE = re.compile(r"^data:image/(png|jpeg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$")

@@ -186,7 +186,9 @@ exportação e importação em JSON.
   são **pagas** ou vão para o **banco de horas**. Só as horas normais vão para o banco:
   as horas entre as 22:00 e as 09:00 são sempre pagas à parte (a dobrar) e nunca entram
   no banco.
-- **Noite de serviço**: quem faz a noite fica obrigatoriamente de folga no dia seguinte
+- **Noite de serviço**: das 19:00 às 09:00 nos dias úteis e a começar mais cedo ao fim de
+  semana (18:00 por omissão, na regra *Noite ao fim de semana começa às*). Quem faz a noite
+  fica obrigatoriamente de folga no dia seguinte
   (um turno nesse dia aparece como conflito). Se a noite calhar a sábado ou domingo, a
   pessoa tem direito a uma **folga extra do plantão**, sempre depois da noite e nunca
   antes: a geração marca-a na semana seguinte, no primeiro dia livre a seguir à folga
@@ -247,6 +249,10 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
   que fecha às 13:00 faz 09:00–13:00 (4 h, sem almoço). Um turno que nem apanhe o
   horário de abertura não é pedido nesse dia.
 - O gráfico «Ao balcão» e o mínimo de pessoas cobrem só o horário de abertura desse dia.
+- **Plantão ao fim de semana**: quando o plantão calha a sábado ou domingo, esse dia abre
+  com o **horário de um dia útil** (e o domingo, normalmente fechado, abre) e a noite de
+  serviço segue até à hora de fecho do turno — por omissão as 09:00 do dia seguinte. Nesse
+  dia vale o mínimo geral ao balcão, não as «Pessoas ao sábado».
 - A coluna «Cobertura dos turnos» avisa se os turnos definidos deixam parte do horário
   de abertura sem ninguém.
 
@@ -267,7 +273,8 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
      (nivelamento automático, sem descer do mínimo de cada faixa).
   2. **Sábado** — só abre de manhã e escala apenas as «Pessoas ao sábado» (2 por omissão),
      a rodar por quem fez menos sábados.
-  3. **Domingo** — fechado; só trabalha o plantão quando calha ao domingo.
+  3. **Domingo** — fechado; quando o plantão calha ao domingo, esse dia abre como um dia
+     útil e é escalado como tal, mais a noite de serviço.
   Em cada cabeçalho de dia há um botão ↻ **«gerar a partir daqui»**: os dias anteriores
   ficam como estão e a escala é refeita desse dia até domingo.
   O plantão é sempre o primeiro a ser atribuído (a rodar por quem fez menos noites). Quando
