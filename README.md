@@ -255,7 +255,8 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
   por omissão) e o domingo, normalmente fechado, abre. A noite segue daí até de manhã
   (09:00). Nesses dias valem as «Pessoas ao sábado» (2) como número escalado e mínimo ao
   balcão; se precisares de mais alguém num período (por exemplo de manhã), acrescenta-o à
-  mão na escala.
+  mão na escala. Durante o intervalo de almoço o mínimo do fim de semana conta menos uma
+  pessoa — é normal ficar só uma ao balcão enquanto a outra almoça.
 - A coluna «Cobertura dos turnos» avisa se os turnos definidos deixam parte do horário
   de abertura sem ninguém.
 

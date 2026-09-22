@@ -1322,9 +1322,12 @@ function lunchesOn(wk, d, exceptId) {
    número de «Pessoas ao sábado»; nos dias úteis vale o mínimo geral e as faixas horárias. */
 function minFor(d, t, wk = state.week) {
   d = ((d % 7) + 7) % 7;
-  /* Ao fim de semana o mínimo é o número de «Pessoas ao sábado»; o reforço de manhã é
-     opcional (a geração escala-o se estiver definido, mas a falta dele não é conflito). */
-  return d >= 5 && !openingOf(d, wk).closed ? saturdayPeople() : minAt(t);
+  if (d < 5 || openingOf(d, wk).closed) return minAt(t);
+  /* Ao fim de semana o mínimo é o número de «Pessoas ao sábado». Durante o intervalo de
+     almoço conta-se menos uma: com uma equipa pequena é normal ficar só uma pessoa enquanto
+     a outra almoça. Se quiseres reforço nessa hora, acrescenta alguém à mão. */
+  const C = cfg(), almoco = t >= toMin(C.lunchFrom) && t < toMin(C.lunchTo);
+  return Math.max(1, saturdayPeople() - (almoco ? 1 : 0));
 }
 function minAt(t) {
   const C = cfg(), tt = ((t % 1440) + 1440) % 1440;
