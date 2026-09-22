@@ -201,11 +201,6 @@ td.cellbox:hover .adj,.adj:focus-visible{opacity:.95}
 .adj:hover{border-color:var(--accent);color:var(--accent)}
 @media print{.adj{display:none}}
 .cell .pin.backpin ~ .pin.lockpin{right:44px}
-.menu-tabs{display:flex;gap:2px;border-top:1px solid var(--line);margin-top:3px;padding:5px 4px 0}
-.mtab{flex:1;border:0;background:transparent;color:var(--ink-3);border-radius:7px;padding:4px 2px;font-size:11.5px;cursor:pointer}
-.mtab:hover{background:var(--surface-2);color:var(--ink)}
-.mtab.cur{background:var(--accent-soft);color:var(--accent);font-weight:600}
-.menu-tabs + .lunch-pick{border-top:0;margin-top:0}
 .menu .locknote{padding:8px 10px;font-size:12px;color:var(--warn)}
 .cell.tone-xoff{background:var(--n-bg);color:var(--n-ink);border:1px dashed var(--n-ink)}
 .dot.tone-xoff{background:var(--n-ink)}
@@ -337,11 +332,17 @@ input.timein.bad{border-color:var(--bad);background:var(--bad-bg)}
 .hact{border:1px solid transparent;background:transparent;border-radius:7px;width:26px;height:26px;display:grid;place-items:center;font-size:14px;line-height:1;padding:0;cursor:pointer;filter:grayscale(1);opacity:.75}
 .hact:hover{background:var(--surface-2);opacity:1}
 .hact.cur{background:var(--accent-soft);border-color:var(--accent);filter:none;opacity:1}
-.opts{display:grid;grid-template-columns:1fr 1fr;gap:2px}
-.opt{display:flex;gap:7px;align-items:center;width:100%;text-align:left;background:transparent;border:0;border-radius:8px;padding:5px 7px}
+.opts{display:block}
+.opt{display:flex;gap:8px;align-items:center;width:100%;text-align:left;background:transparent;border:0;border-radius:8px;padding:5px 8px}
 .opt:hover,.opt:focus-visible{background:var(--surface-2)}
 .opt.cur{background:var(--accent-soft)}
-.opt b{font:600 12.5px var(--mono);white-space:nowrap}
+.opt b{font:600 13px var(--sans);white-space:nowrap}
+.opt small{font:12px var(--mono);color:var(--ink-3);margin-left:auto}
+.opt em + small,.opt small + em{margin-left:6px}
+.stepper{display:inline-flex;align-items:center;gap:6px}
+.stepper button{width:28px;height:26px;border:1px solid var(--line);background:var(--bg);border-radius:7px;font:600 15px var(--sans);line-height:1;color:var(--ink);cursor:pointer}
+.stepper button:hover{border-color:var(--accent);color:var(--accent)}
+.stepper b{min-width:56px;text-align:center;font:600 13px var(--mono)}
 .opt em{font-style:normal;font-size:11px;margin-left:auto;font-weight:700}
 .opt em.lvl-bad{color:var(--bad)}.opt em.lvl-warn{color:var(--warn)}.opt em.lvl-info{display:none}
 .lvl-bad{color:var(--bad)} .lvl-warn{color:var(--warn)} .lvl-info{color:var(--ink-3)}
@@ -2669,7 +2670,7 @@ function openMenu(btn) {
     const aviso = iss.length ? `<em class="lvl-${w}" title="${esc(iss.map(i => i.msg).join(' · '))}">${w === 'bad' ? '✕' : '!'}</em>` : '';
     return `<button class="opt ${isCur ? 'cur' : ''}" role="menuitem" data-action="pick" data-code="${sh ? esc(sh.id) : ''}" title="${sh ? esc(sh.name) + (iss.length ? ' — ' + esc(iss.map(i => i.msg).join(' · ')) : '') : 'Folga'}">
       <span class="dot ${sh ? toneOf(sh) : 'tone-off'}"></span>
-      <b>${sh ? `${sh.start}–${sh.end}` : 'Folga'}</b>${aviso}</button>`;
+      <b>${sh ? esc(sh.name) : 'Folga'}</b>${sh ? `<small>${sh.start}–${sh.end}</small>` : ''}${aviso}</button>`;
   }).join('');
   /* Horas do dia de plantão: pagas ou para o banco */
   let dutyPick = '';
@@ -2706,12 +2707,15 @@ function openMenu(btn) {
   let lessPick = '';
   if (cur?.sh) {
     const [es, ee] = cellSpan(cur), hh = cellHours(cur), adj = +cur.less || 0;
-    lessPick = `<div class="lunch-pick"><p>Ajuste do dia · faz ${fmtMin(es)}–${fmtMin(ee % 1440)} (${fmtH(hh.normal)} h)${adj ? ` · ${adj > 0 ? '−' : '+'}${fmtH(Math.abs(adj))} h no banco` : ''}</p><div style="align-items:center">
-      <button class="lchip" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="0.5">−30 min</button>
-      <button class="lchip" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="-0.5">+30 min</button>
-      <button class="lchip" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="2">−2 h</button>
-      <button class="lchip" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="-2">+2 h</button>
-      ${adj ? '<button class="lchip" data-action="less" data-h="0">Repor o turno</button>' : ''}
+    /* Ajuste em passos de meia hora: − 00:00 + (positivo = horas a mais, negativo = a menos). */
+    const val = -adj, sinal = val > 0 ? '+' : val < 0 ? '−' : '';
+    lessPick = `<div class="lunch-pick"><p>Ajuste do dia · faz ${fmtMin(es)}–${fmtMin(ee % 1440)} (${fmtH(hh.normal)} h)${adj ? ` · ${sinal}${fmtH(Math.abs(val))} h no banco` : ''}</p><div style="align-items:center">
+      <span class="stepper">
+        <button data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="0.5" title="Meia hora a menos" aria-label="Meia hora a menos">−</button>
+        <b class="${val > 0 ? 'pos' : val < 0 ? 'neg' : ''}">${sinal}${pad(Math.floor(Math.abs(val)))}:${pad(Math.round((Math.abs(val) % 1) * 60))}</b>
+        <button data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="-0.5" title="Meia hora a mais" aria-label="Meia hora a mais">+</button>
+      </span>
+      ${adj ? '<button class="lchip" data-action="less" data-h="0">Repor</button>' : ''}
     </div></div>`;
   }
   let postPick = '';
@@ -2721,14 +2725,9 @@ function openMenu(btn) {
       <button class="lchip ${cur.post === 'back' ? 'cur' : ''}" data-action="post" data-post="back">Backoffice</button>
     </div></div>`;
   }
-  /* Secções em separadores: mostra-se só a que está escolhida, para o menu ficar curto. */
-  const secs = [['posto', 'Posto', postPick], ['ajuste', 'Ajuste', lessPick], ['almoço', 'Almoço', lunch], ['plantão', 'Plantão', dutyPick], ['banco', 'Banco', e.extra ? '' : bankPick]].filter(x => x[2]);
-  if (!secs.some(x => x[0] === state.menuSec)) state.menuSec = secs[0]?.[0] || '';
-  const tabs = secs.length ? `<div class="menu-tabs">${secs.map(([k, n]) => `<button class="mtab ${state.menuSec === k ? 'cur' : ''}" data-action="menu-sec" data-k="${k}">${n}</button>`).join('')}</div>` : '';
-  const corpo = secs.filter(([k]) => k === state.menuSec).map(x => x[2]).join('');
   menu.innerHTML = cur?.lock
     ? `${head}<div class="locknote">🔒 Bloqueada — carrega no cadeado para alterar.</div>`
-    : `${head}${extraPick}<div class="opts">${opts}</div>${tabs}${corpo}`;
+    : `${head}${extraPick}<div class="opts">${opts}</div>${postPick}${lessPick}${dutyPick}${lunch}${e.extra ? '' : bankPick}`;
   menu.hidden = false;
   const r = btn.getBoundingClientRect();
   const mw = menu.offsetWidth, mh = menu.offsetHeight;
@@ -3070,7 +3069,7 @@ document.addEventListener('click', async ev => {
   if (!el) { if (!ev.target.closest('#menu')) closeMenu(); return; }
   const a = el.dataset.action;
   if (['my-avatar', 'my-password', 'logout'].includes(a)) state.userMenuOpen = false;
-  if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation', 'sick', 'xoff', 'lock', 'less', 'adj', 'extra-hours', 'lunch-len', 'menu-sec'].includes(a)) closeMenu();
+  if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation', 'sick', 'xoff', 'lock', 'less', 'adj', 'extra-hours', 'lunch-len'].includes(a)) closeMenu();
   switch (a) {
     case 'tab': state.tab = el.dataset.tab; ls.set('escala.tab', state.tab); render(); window.scrollTo(0, 0); break;
     case 'logout':
@@ -3092,7 +3091,6 @@ document.addEventListener('click', async ev => {
       toast(THEMES.find(([k]) => k === currentTheme)[1]);
       break;
     }
-    case 'menu-sec': { state.menuSec = el.dataset.k; if (menuCtx?.btn) openMenu(menuCtx.btn); break; }
     case 'user-menu': state.userMenuOpen = !state.userMenuOpen; $('#whoami').innerHTML = userMenuHTML(); break;
     case 'my-avatar': openAvatar(); break;
     case 'close-av': $('#avdlg').close(); break;
