@@ -207,11 +207,11 @@ exportação e importação em JSON.
 - **Bloquear**: no menu da célula, «Bloquear» fixa o que lá está (turno, folga, férias…):
   nada a altera — nem gerar, nivelar, distribuir almoços, copiar a semana anterior ou
   limpar a semana, nem edições à mão — até ser desbloqueada. Aparece com 🔒.
-- **Balcão e backoffice**: cada turno atribuído pode estar ao *balcão* ou em
-  *backoffice*. O gráfico de presença e o mínimo ao balcão só contam quem está ao
-  balcão; quem está em backoffice aparece numa linha própria e serve de reforço nas
-  horas de ponta. Por omissão são 3 ao balcão e 1 em backoffice por dia. O backoffice
-  não trabalha ao sábado nem ao domingo.
+- **Balcão e backoffice**: só quem está marcado como **backoffice** na ficha trabalha
+  nesse posto — quem é do balcão nunca lá vai (a secção *Posto* nem aparece no menu da
+  célula). Quem é de backoffice **pode ir para o balcão** quando for preciso, bastando
+  mudar o posto. O gráfico de presença e o mínimo ao balcão só contam quem está ao
+  balcão; o backoffice aparece numa linha própria e não trabalha ao fim de semana.
 - **Backoffice por defeito**: na ficha, marca quem trabalha sempre em backoffice. Os
   turnos dessa pessoa entram logo nesse posto e ela não é escalada ao fim de semana.
   Quem está marcado como backoffice faz **sempre o horário de backoffice** (a geração não

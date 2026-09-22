@@ -329,9 +329,10 @@ input.timein.bad{border-color:var(--bad);background:var(--bad-bg)}
 .menu-head b{color:var(--ink);font-size:13px}
 .menu-head small{display:block;font:11px var(--mono);color:var(--ink-3)}
 .head-acts{display:flex;gap:2px;flex:none}
-.hact{border:1px solid transparent;background:transparent;border-radius:7px;width:26px;height:26px;display:grid;place-items:center;font-size:14px;line-height:1;padding:0;cursor:pointer;filter:grayscale(1);opacity:.75}
-.hact:hover{background:var(--surface-2);opacity:1}
-.hact.cur{background:var(--accent-soft);border-color:var(--accent);filter:none;opacity:1}
+.hact{border:1px solid transparent;background:transparent;border-radius:7px;width:26px;height:26px;display:grid;place-items:center;font-size:15px;line-height:1;padding:0;cursor:pointer;opacity:.9}
+.hact:hover{background:var(--surface-2);opacity:1;transform:scale(1.08)}
+.hact.cur{background:var(--accent-soft);border-color:var(--accent);opacity:1}
+.hact.star{color:var(--n-ink)}.hact.star.cur{color:var(--n-ink)}
 .opts{display:block}
 .opt{display:flex;gap:8px;align-items:center;width:100%;text-align:left;background:transparent;border:0;border-radius:8px;padding:5px 8px}
 .opt:hover,.opt:focus-visible{background:var(--surface-2)}
@@ -1394,7 +1395,7 @@ function cellIssues(e, id, wk, d, cell, lookup = getCell, both = false) {
     return out;
   }
   if (!sh) { out.push({ lvl: 'bad', msg: 'Este turno já não existe — escolhe outro' }); return out; }
-  if (sh.back && cell.post !== 'back') out.push({ lvl: 'warn', msg: 'Horário de backoffice: deve estar em backoffice, não ao balcão' });
+  if (cell.post === 'back' && !e.backoffice) out.push({ lvl: 'warn', msg: 'Quem é do balcão não trabalha em backoffice' });
   if (e.backoffice && d >= 5) out.push({ lvl: 'bad', msg: 'O backoffice não trabalha ao sábado nem ao domingo' });
   else if (cell.post === 'back' && d >= 5) out.push({ lvl: 'warn', msg: 'O backoffice não trabalha ao fim de semana' });
   if (e.extra) out.push({ lvl: 'info', msg: 'Pessoa extra com um turno completo — podes antes indicar só as horas que fez' });
@@ -1712,16 +1713,7 @@ function generate(wk, fromDay = 0) {
   }
   /* 7. Backoffice e almoços */
   for (let d = fromDay; d < 7; d++) {
-    const jaBack = ids.filter(id => cells[id][d]?.post === 'back').length;
-    const backAlvo = d < 5 ? Math.max(0, (+cfg().backofficePerDay || 0) - jaBack) : 0;
-    if (backAlvo) {
-      const doDia = ids.filter(id => {
-        const sh = shiftById(cells[id][d]?.s);
-        return sh && !sh.night && !sh.onlyDuty && cells[id][d].post !== 'back' && !held(id, d);
-      }).sort((a, b) => toMin(shiftById(cells[b][d].s).start) - toMin(shiftById(cells[a][d].s).start));
-      doDia.slice(0, Math.min(backAlvo, Math.max(0, doDia.length - Math.max(0, +cfg().minPresent || 0))))
-        .forEach(id => { cells[id][d].post = 'back'; });
-    }
+    /* Só quem é de backoffice fica em backoffice: quem é do balcão nunca lá vai. */
     const taken = [];
     ids.filter(id => held(id, d) && cells[id][d].l).forEach(id => taken.push({ t: toMin(cells[id][d].l), d: cells[id][d].ld || lunchMinLen() }));
     ids.filter(id => shiftOn(shiftById(cells[id][d]?.s), d, wk)?.lunch && !held(id, d))
@@ -2000,7 +1992,7 @@ function renderSchedule() {
     let run = null;
     const flush = () => {
       if (!run) return;
-      const reforco = run.back ? ` — há ${run.back === 1 ? '1 pessoa' : `${run.back} pessoas`} em backoffice que pode reforçar` : '';
+      const reforco = run.back ? ` — há ${run.back === 1 ? '1 pessoa' : `${run.back} pessoas`} em backoffice que pode passar ao balcão` : '';
       alerts.push({
         lvl: run.back ? 'warn' : 'bad', who: 'Balcão', when: `${DAYS[d]} ${days[d].getDate()}`,
         msg: `${fmtMin(run.a)}–${fmtMin(run.b)}: ${run.n === 0 ? 'ninguém' : run.n === 1 ? 'só 1 pessoa' : `só ${run.n} pessoas`} ao balcão (mínimo ${run.min})${reforco}`,
@@ -2021,20 +2013,13 @@ function renderSchedule() {
   const bandsTxt = (C.presenceBands || []).filter(b => validTime(b.from) && validTime(b.to)).map(b => `${b.from}–${b.to} ${+b.min || 0}`).join(', ');
   foot += `<tr><th scope="row">Ao balcão<small>por ½ hora · mín. ${C.minPresent}${bandsTxt ? ` (${bandsTxt})` : ''}</small></th>${presRow}<td class="tot"></td></tr>`;
 
-  let backRow = '';
+  let backRow = '', backTotal = 0;
   for (let d = 0; d < 7; d++) {
-    const backAlvo = d < 5 ? Math.max(0, +C.backofficePerDay || 0) : 0; // o backoffice não trabalha ao fim de semana
     const n = ids.filter(id => isBackoffice(getCell(wk, id, d))).length;
-    if (closed[d] && !n) { backRow += `<td class="${d >= 5 ? 'we' : ''} closed"><span class="cov none">—</span></td>`; continue; }
-    if (hasSched && backAlvo && n !== backAlvo) {
-      alerts.push({
-        lvl: 'warn', who: 'Backoffice', when: `${DAYS[d]} ${days[d].getDate()}`,
-        msg: n === 0 ? `Ninguém em backoffice (esperado ${backAlvo})` : `${n} pessoas em backoffice (esperado ${backAlvo})`,
-      });
-    }
-    backRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''}">${backAlvo || n ? `<span class="cov ${n < backAlvo ? 'short' : n > backAlvo ? 'extra' : 'ok'}">${n}/${backAlvo}</span>` : '<span class="cov none">—</span>'}</td>`;
+    backTotal += n;
+    backRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}">${n ? `<span class="cov ok">${n}</span>` : '<span class="cov none">—</span>'}</td>`;
   }
-  foot += `<tr><th scope="row">Backoffice<small>pode reforçar o balcão</small></th>${backRow}<td class="tot"></td></tr>`;
+  if (backTotal) foot += `<tr><th scope="row">Backoffice<small>não conta para o balcão</small></th>${backRow}<td class="tot"></td></tr>`;
 
   let vacRow = '';
   let vacTotal = 0;
@@ -2117,11 +2102,11 @@ function renderSchedule() {
         <dt>Plantão</dt><dd>${DAYS_LONG[duty]} nesta semana; recua ${C.dutyStep === 1 ? 'um dia' : `${C.dutyStep} dias`} por semana</dd>
         <dt>Horas nocturnas</dt><dd>Entre ${C.doubleFrom} e ${C.doubleTo} não contam como trabalhadas: são horas nocturnas, pagas à parte ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}. Quem faz a noite de serviço soma só ${fmtH(hoursOf(cfg().shifts.find(x => x.night) || { start: '19:00', end: '22:00' }, '').normal)} h à semana</dd>
         <dt>Almoço</dt><dd>${lunchMaxLen() > lunchMinLen() ? `entre ${fmtDur(lunchMinLen())} e ${fmtDur(lunchMaxLen())}` : `${lunchMinLen()} min`}, a começar entre ${C.lunchFrom} e ${fmtMin(toMin(C.lunchTo) - lunchMinLen())}. Em backoffice é sempre às ${esc(backLunchAt())}</dd>
-        <dt>Balcão</dt><dd>Pelo menos ${C.minPresent} ${+C.minPresent === 1 ? 'pessoa' : 'pessoas'} durante o horário de abertura${bandsTxt ? ` (${bandsTxt})` : ''}${+C.backofficePerDay ? `, mais ${C.backofficePerDay} em backoffice que pode reforçar` : ''}</dd>
+        <dt>Balcão</dt><dd>Pelo menos ${C.minPresent} ${+C.minPresent === 1 ? 'pessoa' : 'pessoas'} durante o horário de abertura${bandsTxt ? ` (${bandsTxt})` : ''}</dd>
         <dt>Férias e baixa</dt><dd>Dias de férias ou de baixa médica não recebem turnos e descontam ${fmtH(dayHours())} h ao mínimo da semana</dd>
         <dt>Descanso</dt><dd>Mínimo de ${C.minRest} h entre o fim de um turno e o início do seguinte</dd>
         <dt>Semana</dt><dd>${fmtH(+C.weeklyHours || 0)} h por pessoa, salvo valor próprio na ficha. Horas descontadas do banco contam para este mínimo</dd>
-        <dt>Backoffice</dt><dd>Não trabalha ao sábado nem ao domingo. Quem é de backoffice por defeito entra sempre nesse posto</dd>
+        <dt>Backoffice</dt><dd>Só quem está marcado como backoffice trabalha nesse posto — e pode ir para o balcão quando for preciso. Não trabalha ao sábado nem ao domingo</dd>
         <dt>Noite de serviço</dt><dd>${(() => { const n = cfg().shifts.find(x => x.night); return n ? `${n.start}–${n.end} nos dias úteis e ${esc(cfg().nightWeekendStart || DEFAULT_CONFIG.nightWeekendStart)}–${n.end} ao fim de semana. ` : ''; })()}Folga obrigatória no dia seguinte. Ao sábado ou domingo dá ainda uma folga extra, marcada na semana seguinte no primeiro dia livre depois do plantão — nunca antes (desconta ${fmtH(dayHours())} h ao mínimo dessa semana)</dd>
         <dt>Banco de horas</dt><dd>As horas acima do mínimo da semana vão para o banco. No dia de plantão escolhes se as horas normais são pagas ou vão para o banco; as horas entre ${C.doubleFrom} e ${C.doubleTo} são sempre pagas à parte. Descontar ${fmtH(dayHours())} h num dia equivale a uma folga</dd>
       </dl>
@@ -2486,7 +2471,6 @@ function renderSettings() {
       </div>
       <div class="field-inline"><label for="cfg-nightWeekendStart">Noite ao fim de semana começa às</label>${timeInput('cfg-nightWeekendStart', c.nightWeekendStart, 'Hora de início da noite de serviço ao fim de semana', 'data-cfg="rule" data-k="nightWeekendStart"', ro)}<small>Ao sábado e ao domingo a noite de serviço começa a esta hora; nos dias úteis vale a hora do turno</small></div>
       <div class="field-inline"><label for="cfg-saturdayPeople">Pessoas ao sábado</label><input type="number" id="cfg-saturdayPeople" data-cfg="rule" data-k="saturdayPeople" value="${+c.saturdayPeople || 0}" min="0" max="20" ${ro}><small>Quantas pessoas a geração escala ao sábado — e ao domingo, quando calha o plantão; é também o mínimo ao balcão nesses dias. Se precisares de mais uma nalgum dia, acrescenta-a à mão na escala</small></div>
-      <div class="field-inline"><label for="cfg-backofficePerDay">Backoffice por dia</label><input type="number" id="cfg-backofficePerDay" data-cfg="rule" data-k="backofficePerDay" value="${+c.backofficePerDay || 0}" min="0" max="10" ${ro}><small>Pessoas fora do balcão, que podem reforçar nas horas de ponta</small></div>
       <div class="field-inline"><label for="cfg-weeklyHours">Horas por semana</label><input type="number" id="cfg-weeklyHours" data-cfg="rule" data-k="weeklyHours" value="${+c.weeklyHours || 0}" min="0" max="80" step="0.5" ${ro}><small>Mínimo de cada pessoa, salvo valor próprio na ficha</small></div>
       <div class="field-inline"><label for="cfg-dayHours">Dia completo (h)</label><input type="number" id="cfg-dayHours" data-cfg="rule" data-k="dayHours" value="${+c.dayHours || 8}" min="1" max="24" step="0.5" ${ro}><small>Descontar isto do banco num dia equivale a uma folga</small></div>
       <div class="field-inline"><label for="cfg-minRest">Descanso entre turnos (h)</label><input type="number" id="cfg-minRest" data-cfg="rule" data-k="minRest" value="${+c.minRest || 0}" min="0" max="24" ${ro}><small>Pausa mínima entre dois dias de trabalho</small></div>
@@ -2648,7 +2632,7 @@ function openMenu(btn) {
   const stateIcons = `<span class="head-acts">
       <button class="hact ${cur?.vac ? 'cur' : ''}" data-action="vacation" data-on="${cur?.vac ? '' : '1'}" title="${cur?.vac ? 'Retirar as férias' : 'Marcar férias'}" aria-label="Férias">🏖</button>
       <button class="hact ${cur?.sick ? 'cur' : ''}" data-action="sick" data-on="${cur?.sick ? '' : '1'}" title="${cur?.sick ? 'Retirar a baixa' : 'Marcar baixa médica'}" aria-label="Baixa médica">🩺</button>
-      <button class="hact ${cur?.xoff ? 'cur' : ''}" data-action="xoff" data-on="${cur?.xoff ? '' : '1'}" title="${cur?.xoff ? 'Retirar a folga extra' : 'Folga extra do plantão'}" aria-label="Folga extra do plantão">★</button>
+      <button class="hact star ${cur?.xoff ? 'cur' : ''}" data-action="xoff" data-on="${cur?.xoff ? '' : '1'}" title="${cur?.xoff ? 'Retirar a folga extra' : 'Folga extra do plantão'}" aria-label="Folga extra do plantão">★</button>
       <button class="hact ${cur?.lock ? 'cur' : ''}" data-action="lock" data-on="${cur?.lock ? '' : '1'}" title="${cur?.lock ? 'Desbloquear a célula' : 'Bloquear: nada altera esta célula'}" aria-label="Bloquear">${cur?.lock ? '🔒' : '🔓'}</button>
     </span>`;
   /* Extras: em vez de turnos, indica-se quantas horas fez e, se quiseres, a que horas entrou. */
@@ -2718,8 +2702,9 @@ function openMenu(btn) {
       ${adj ? '<button class="lchip" data-action="less" data-h="0">Repor</button>' : ''}
     </div></div>`;
   }
+  /* Quem é do balcão nunca vai para backoffice; por isso a secção só aparece a quem é de backoffice. */
   let postPick = '';
-  if (worksOn(cur)) {
+  if (worksOn(cur) && (e.backoffice || cur.post === 'back')) {
     postPick = `<div class="lunch-pick"><p>Posto</p><div>
       <button class="lchip ${cur.post === 'back' ? '' : 'cur'}" data-action="post" data-post="">Balcão</button>
       <button class="lchip ${cur.post === 'back' ? 'cur' : ''}" data-action="post" data-post="back">Backoffice</button>
