@@ -15,6 +15,7 @@
   --bank-bg:#E2F1F2; --bank-ink:#12545C; --bank-dot:#2E8C97;
   --vac-bg:#EDE7DC; --vac-ink:#6B4F1D; --vac-dot:#B08A3E;
   --sick-bg:#F3E3E6; --sick-ink:#7A2E3C; --sick-dot:#B85468;
+  --hol-bg:#EAE4F7; --hol-ink:#4B3A7A;
   --off-dot:#B9C6C2;
   --bad:#B42318; --bad-bg:#FDE7E4; --warn:#A64B06; --warn-bg:#FEF1DC; --ok:#17804A; --ok-bg:#DEF3E6;
   --weekend:#EAF1EE; --duty:#F3ECFB; --overlay:rgba(12,22,19,.45);
@@ -36,6 +37,7 @@
     --bank-bg:#102E31; --bank-ink:#8FD3DB; --bank-dot:#3FA8B4;
     --vac-bg:#2E2617; --vac-ink:#DCC08A; --vac-dot:#C09B52;
     --sick-bg:#33191F; --sick-ink:#E5A3B1; --sick-dot:#C46A7C;
+    --hol-bg:#241C3A; --hol-ink:#C3B4EA;
     --off-dot:#4A5A55;
     --bad:#F58B80; --bad-bg:#3A1714; --warn:#F5B266; --warn-bg:#3A260E; --ok:#62D896; --ok-bg:#12301F;
     --weekend:#18231F; --duty:#211E33; --overlay:rgba(0,0,0,.6);
@@ -144,6 +146,10 @@ table.grid{border-collapse:separate;border-spacing:0;width:100%;min-width:980px}
 .grid thead th .regen{display:block;margin:4px auto 0;width:22px;height:22px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink-3);font-size:13px;line-height:1;padding:0;cursor:pointer;opacity:.6}
 .grid thead th .regen:hover{opacity:1;color:var(--accent);border-color:var(--accent)}
 @media print{.grid thead th .regen{display:none}}
+.grid thead th .hol-tag{display:block;margin-top:3px;font:10px var(--sans);line-height:1.15;color:var(--hol-ink);background:var(--hol-bg);border-radius:4px;padding:1px 4px;max-width:96px;margin-inline:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grid thead th.holiday b{color:var(--hol-ink)}
+.grid td.holiday,.counter td.holiday{background:color-mix(in srgb,var(--hol-bg) 45%,transparent)}
+.counter thead th.holiday b{color:var(--hol-ink)}
 .grid thead th .closed-tag{display:inline-block;margin-top:3px;font:10px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);border:1px dashed var(--line);border-radius:4px;padding:0 5px}
 .grid td.closed,.grid thead th.closed{background:repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in srgb,var(--ink) 4%,transparent) 6px 7px)}
 .cfg.opening tr.closed th{color:var(--ink-3)}
@@ -195,6 +201,11 @@ td.cellbox:hover .adj,.adj:focus-visible{opacity:.95}
 .adj:hover{border-color:var(--accent);color:var(--accent)}
 @media print{.adj{display:none}}
 .cell .pin.backpin ~ .pin.lockpin{right:44px}
+.menu-tabs{display:flex;gap:2px;border-top:1px solid var(--line);margin-top:3px;padding:5px 4px 0}
+.mtab{flex:1;border:0;background:transparent;color:var(--ink-3);border-radius:7px;padding:4px 2px;font-size:11.5px;cursor:pointer}
+.mtab:hover{background:var(--surface-2);color:var(--ink)}
+.mtab.cur{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.menu-tabs + .lunch-pick{border-top:0;margin-top:0}
 .menu .locknote{padding:8px 10px;font-size:12px;color:var(--warn)}
 .cell.tone-xoff{background:var(--n-bg);color:var(--n-ink);border:1px dashed var(--n-ink)}
 .dot.tone-xoff{background:var(--n-ink)}
@@ -318,20 +329,26 @@ input.timein.bad{border-color:var(--bad);background:var(--bad-bg)}
 .dirty-note{font-size:13px;color:var(--warn)}
 .data-io textarea{width:100%;min-height:120px;border:1px solid var(--line);border-radius:9px;background:var(--bg);padding:10px;font:12px var(--mono);resize:vertical}
 
-.menu{position:absolute;z-index:40;width:280px;max-width:calc(100vw - 32px);background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px;max-height:80vh;overflow:auto}
-.menu-head{font-size:12px;color:var(--ink-3);padding:6px 8px 8px;border-bottom:1px solid var(--line);margin-bottom:4px}
-.opt{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;background:transparent;border:0;border-radius:8px;padding:8px}
+.menu{position:absolute;z-index:40;width:330px;max-width:calc(100vw - 32px);background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px;max-height:80vh;overflow:auto}
+.menu-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;font-size:12px;color:var(--ink-3);padding:5px 6px 7px;border-bottom:1px solid var(--line);margin-bottom:3px}
+.menu-head b{color:var(--ink);font-size:13px}
+.menu-head small{display:block;font:11px var(--mono);color:var(--ink-3)}
+.head-acts{display:flex;gap:2px;flex:none}
+.hact{border:1px solid transparent;background:transparent;border-radius:7px;width:26px;height:26px;display:grid;place-items:center;font-size:14px;line-height:1;padding:0;cursor:pointer;filter:grayscale(1);opacity:.75}
+.hact:hover{background:var(--surface-2);opacity:1}
+.hact.cur{background:var(--accent-soft);border-color:var(--accent);filter:none;opacity:1}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:2px}
+.opt{display:flex;gap:7px;align-items:center;width:100%;text-align:left;background:transparent;border:0;border-radius:8px;padding:5px 7px}
 .opt:hover,.opt:focus-visible{background:var(--surface-2)}
 .opt.cur{background:var(--accent-soft)}
-.opt .dot{margin-top:6px}
-.opt b{font-weight:600;font-size:14px}
-.opt small{font:12px var(--mono);color:var(--ink-3);margin-left:6px}
-.opt em{display:block;font-style:normal;font-size:12px;margin-top:2px}
+.opt b{font:600 12.5px var(--mono);white-space:nowrap}
+.opt em{font-style:normal;font-size:11px;margin-left:auto;font-weight:700}
+.opt em.lvl-bad{color:var(--bad)}.opt em.lvl-warn{color:var(--warn)}.opt em.lvl-info{display:none}
 .lvl-bad{color:var(--bad)} .lvl-warn{color:var(--warn)} .lvl-info{color:var(--ink-3)}
-.lunch-pick{border-top:1px solid var(--line);margin-top:4px;padding:8px}
-.lunch-pick p{margin:0 0 6px;font-size:12px;color:var(--ink-3)}
+.lunch-pick{border-top:1px solid var(--line);margin-top:3px;padding:6px 7px}
+.lunch-pick p{margin:0 0 4px;font-size:11.5px;color:var(--ink-3)}
 .lunch-pick div{display:flex;flex-wrap:wrap;gap:5px}
-.lchip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:3px 9px;font:12px var(--mono)}
+.lchip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:2px 8px;font:11.5px var(--mono)}
 .lchip:hover{border-color:var(--ink-3)}
 .lchip.cur{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .lchip.over{border-style:dashed;color:var(--warn)}
@@ -653,6 +670,8 @@ const DEFAULT_CONFIG = {
   lunchFrom: '12:00', lunchTo: '16:00', lunchMin: 60, lunchMax: 120, minPresent: 3, minRest: 11,
   /* Quem está em backoffice almoça sempre a esta hora, com a duração mínima. */
   backLunchAt: '12:00',
+  /* Feriados: nacionais (incluindo os móveis), o municipal da localidade e os que acrescentares. */
+  holidays: true, town: '', townHoliday: '', extraHolidays: [],
   doubleFrom: '22:00', doubleTo: '09:00', doubleFactor: 2,
   dutyAnchorWeek: '2026-09-21', dutyAnchorDay: 0, dutyStep: -1,
   weeklyHours: 40, dayHours: 8, backofficePerDay: 1,
@@ -790,6 +809,74 @@ function dutyDay(wk) {
   const step = Number.isFinite(+C.dutyStep) ? +C.dutyStep : 1;
   return (((+C.dutyAnchorDay || 0) - weeks * step) % 7 + 700) % 7;
 }
+/* ---------- Feriados ---------- */
+/* Feriado municipal de alguns concelhos — confirma sempre a data do teu (pode ser editada). */
+const TOWN_HOLIDAYS = {
+  'lisboa': ['06-13', 'Santo António'],
+  'porto': ['06-24', 'São João'],
+  'braga': ['06-24', 'São João'],
+  'coimbra': ['07-04', 'Rainha Santa Isabel'],
+  'évora': ['06-29', 'São Pedro'],
+  'evora': ['06-29', 'São Pedro'],
+  'aveiro': ['05-12', 'Dia da Cidade'],
+  'setúbal': ['09-15', 'Dia da Cidade (Bocage)'],
+  'setubal': ['09-15', 'Dia da Cidade (Bocage)'],
+  'faro': ['09-07', 'Dia da Cidade'],
+  'funchal': ['08-21', 'Dia da Cidade'],
+};
+/** Domingo de Páscoa (algoritmo de Meeus/Jones/Butcher). */
+function easter(year) {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const dd = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - dd - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31), dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, mes - 1, dia);
+}
+const _holCache = {};
+/** Feriados de um ano: nacionais, o municipal da localidade e os acrescentados à mão. */
+function holidaysOfYear(year) {
+  const C = cfg(), chave = `${year}|${C.holidays}|${C.townHoliday}|${C.town}|${JSON.stringify(C.extraHolidays || [])}`;
+  if (_holCache.k === chave) return _holCache.v;
+  const out = {};
+  if (C.holidays !== false) {
+    const fixos = [['01-01', 'Ano Novo'], ['04-25', 'Dia da Liberdade'], ['05-01', 'Dia do Trabalhador'],
+      ['06-10', 'Dia de Portugal'], ['08-15', 'Assunção de Nossa Senhora'], ['10-05', 'Implantação da República'],
+      ['11-01', 'Todos-os-Santos'], ['12-01', 'Restauração da Independência'], ['12-08', 'Imaculada Conceição'],
+      ['12-25', 'Natal']];
+    fixos.forEach(([md, nome]) => { out[`${year}-${md}`] = nome; });
+    const pascoa = easter(year);
+    const mov = [[-2, 'Sexta-feira Santa'], [0, 'Páscoa'], [60, 'Corpo de Deus']];
+    mov.forEach(([n, nome]) => { out[iso(addDays(pascoa, n))] = nome; });
+  }
+  const muni = normalizeMD(C.townHoliday);
+  if (muni) out[`${year}-${muni}`] = `Feriado municipal${String(C.town || '').trim() ? ' · ' + String(C.town).trim() : ''}`;
+  for (const h of (Array.isArray(C.extraHolidays) ? C.extraHolidays : [])) {
+    const d = String(h?.date || '').trim();
+    const key = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : normalizeMD(d) ? `${year}-${normalizeMD(d)}` : '';
+    if (key) out[key] = String(h.name || 'Feriado').slice(0, 40);
+  }
+  _holCache.k = chave; _holCache.v = out;
+  return out;
+}
+/** Mostra MM-DD como dia-mês (13-06), que é como se escreve cá. */
+const fmtMD = md => { const m = String(md || '').match(/^(\d{2})-(\d{2})$/); return m ? `${m[2]}-${m[1]}` : String(md || ''); };
+/** Aceita 13-06, 13/06, 06-13 (mês-dia) e devolve sempre MM-DD. */
+function normalizeMD(v) {
+  const m = String(v || '').trim().match(/^(\d{1,2})[-/.](\d{1,2})$/);
+  if (!m) return '';
+  let [, a, b] = m.map(Number);
+  if (a > 12 && b <= 12) [a, b] = [b, a]; // veio dia-mês
+  if (a < 1 || a > 12 || b < 1 || b > 31) return '';
+  return `${pad(a)}-${pad(b)}`;
+}
+/** Nome do feriado nessa data (ISO), ou vazio. */
+function holidayOn(isoDate) {
+  const ano = +String(isoDate).slice(0, 4);
+  return holidaysOfYear(ano)[isoDate] || '';
+}
+
 /* ---------- Horário da farmácia ---------- */
 /** Horário do dia tal como está definido, sem ter em conta o plantão. */
 function openingRaw(d) {
@@ -1861,7 +1948,7 @@ function renderSchedule() {
         ? `<button class="adj minus" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="0.5" title="Meia hora a menos (sai mais cedo)" tabindex="-1">−</button>`
           + `<button class="adj plus" data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="-0.5" title="Meia hora a mais (sai mais tarde)" tabindex="-1">+</button>`
         : '';
-      tds += `<td class="cellbox ${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''}">${ajust}<button class="cell ${tone} ${c?.lock ? 'locked' : ''} ${worst && worst !== 'info' ? 'has-' + worst : ''}" data-action="cell" data-id="${esc(id)}" data-d="${d}" title="${esc(label)}" aria-label="${esc(label)}" aria-haspopup="menu" ${state.readOnly ? 'disabled' : ''}>${inner}${e.fixed?.[d] ? '<i class="pin">fixo</i>' : ''}${c?.pay === 'bank' ? '<i class="pin bankpin">banco</i>' : ''}${isBackoffice(c) ? '<i class="pin backpin">back</i>' : ''}${c?.less ? `<i class="pin lesspin">${c.less > 0 ? '−' : '+'}${fmtH(Math.abs(c.less))}h</i>` : ''}${c?.lock ? '<i class="pin lockpin" title="Bloqueada">🔒</i>' : ''}${worst === 'bad' || worst === 'warn' ? '<i class="flag"></i>' : ''}</button></td>`;
+      tds += `<td class="cellbox ${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''} ${holidayOn(iso(days[d])) ? 'holiday' : ''}">${ajust}<button class="cell ${tone} ${c?.lock ? 'locked' : ''} ${worst && worst !== 'info' ? 'has-' + worst : ''}" data-action="cell" data-id="${esc(id)}" data-d="${d}" title="${esc(label)}" aria-label="${esc(label)}" aria-haspopup="menu" ${state.readOnly ? 'disabled' : ''}>${inner}${e.fixed?.[d] ? '<i class="pin">fixo</i>' : ''}${c?.pay === 'bank' ? '<i class="pin bankpin">banco</i>' : ''}${isBackoffice(c) ? '<i class="pin backpin">back</i>' : ''}${c?.less ? `<i class="pin lesspin">${c.less > 0 ? '−' : '+'}${fmtH(Math.abs(c.less))}h</i>` : ''}${c?.lock ? '<i class="pin lockpin" title="Bloqueada">🔒</i>' : ''}${worst === 'bad' || worst === 'warn' ? '<i class="flag"></i>' : ''}</button></td>`;
     }
     const over = false;
     if (st.xoffOwed) alerts.push({ lvl: 'warn', who: e.name, when: 'Semana', msg: `Tem direito a ${st.xoffOwed === 1 ? 'uma folga extra' : st.xoffOwed + ' folgas extra'} pela noite de plantão ao fim de semana — ainda não está marcada` });
@@ -1974,7 +2061,7 @@ function renderSchedule() {
   const bad = alerts.filter(a => a.lvl === 'bad').length, warn = alerts.length - bad;
   alerts.sort((a, b) => (a.lvl === b.lvl ? 0 : a.lvl === 'bad' ? -1 : 1));
 
-  const head = days.map((dt, d) => `<th scope="col" class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''} ${iso(dt) === today ? 'today' : ''}" title="${closed[d] ? 'Farmácia fechada' : `Aberta ${openingOf(d, wk).open}–${openingOf(d, wk).close}`}">${DAYS[d]}<b>${dt.getDate()}</b>${d === duty ? '<span class="duty-tag">plantão</span>' : ''}${closed[d] ? '<span class="closed-tag">fechada</span>' : ''}${d > 0 && !state.readOnly && ids.length ? `<button class="regen" data-action="generate-from" data-d="${d}" title="Gerar nova escala só a partir de ${DAYS_LONG[d].toLowerCase()} ${dt.getDate()} (os dias anteriores ficam como estão)" aria-label="Gerar a partir de ${DAYS_LONG[d]}">↻</button>` : ''}</th>`).join('');
+  const head = days.map((dt, d) => `<th scope="col" class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''} ${closed[d] ? 'closed' : ''} ${holidayOn(iso(dt)) ? 'holiday' : ''} ${iso(dt) === today ? 'today' : ''}" title="${closed[d] ? 'Farmácia fechada' : `Aberta ${openingOf(d, wk).open}–${openingOf(d, wk).close}`}${holidayOn(iso(dt)) ? ' · ' + esc(holidayOn(iso(dt))) : ''}">${DAYS[d]}<b>${dt.getDate()}</b>${holidayOn(iso(dt)) ? `<span class="hol-tag" title="${esc(holidayOn(iso(dt)))}">${esc(holidayOn(iso(dt)))}</span>` : ''}${d === duty ? '<span class="duty-tag">plantão</span>' : ''}${closed[d] ? '<span class="closed-tag">fechada</span>' : ''}${d > 0 && !state.readOnly && ids.length ? `<button class="regen" data-action="generate-from" data-d="${d}" title="Gerar nova escala só a partir de ${DAYS_LONG[d].toLowerCase()} ${dt.getDate()} (os dias anteriores ficam como estão)" aria-label="Gerar a partir de ${DAYS_LONG[d]}">↻</button>` : ''}</th>`).join('');
   const ro = state.readOnly ? 'disabled' : '';
   const shiftsTxt = sortedShifts().map(s => {
     const h = hoursOf(s, '');
@@ -2024,6 +2111,7 @@ function renderSchedule() {
       <h2>Regras da escala</h2>
       <dl>
         ${shiftsTxt}
+        <dt>Feriados</dt><dd>${(() => { const f = days.map((dt, d) => ({ d, n: holidayOn(iso(dt)) })).filter(x => x.n); return f.length ? f.map(x => `${DAYS[x.d]}: ${esc(x.n)}`).join(' · ') : 'Nenhum nesta semana'; })()}</dd>
         <dt>Horário</dt><dd>${esc(openingSummary())}. Os turnos terminam à hora de fecho; num dia fechado só trabalha o plantão. Quando o plantão calha ao fim de semana, esse dia abre até às ${esc(weekendNightStart())}, com ${saturdayPeople()} ${saturdayPeople() === 1 ? 'pessoa' : 'pessoas'}, e a noite de serviço segue a partir daí</dd>
         <dt>Plantão</dt><dd>${DAYS_LONG[duty]} nesta semana; recua ${C.dutyStep === 1 ? 'um dia' : `${C.dutyStep} dias`} por semana</dd>
         <dt>Horas nocturnas</dt><dd>Entre ${C.doubleFrom} e ${C.doubleTo} não contam como trabalhadas: são horas nocturnas, pagas à parte ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}. Quem faz a noite de serviço soma só ${fmtH(hoursOf(cfg().shifts.find(x => x.night) || { start: '19:00', end: '22:00' }, '').normal)} h à semana</dd>
@@ -2063,7 +2151,7 @@ function renderCounter() {
     }
     return out;
   };
-  const head = days.map((dt, d) => `<th class="${d === duty ? 'duty' : ''} ${iso(dt) === today ? 'today' : ''}">${DAYS[d]}<b>${dt.getDate()}</b>${d === duty ? '<span class="duty-tag">plantão</span>' : ''}${open[d] ? `<small class="muted" style="display:block;font-size:11px">${fmtMin(open[d][0])}–${fmtMin(open[d][1])}</small>` : '<span class="closed-tag">fechada</span>'}</th>`).join('');
+  const head = days.map((dt, d) => `<th class="${d === duty ? 'duty' : ''} ${holidayOn(iso(dt)) ? 'holiday' : ''} ${iso(dt) === today ? 'today' : ''}" title="${holidayOn(iso(dt)) ? esc(holidayOn(iso(dt))) : ''}">${DAYS[d]}<b>${dt.getDate()}</b>${holidayOn(iso(dt)) ? `<span class="hol-tag">${esc(holidayOn(iso(dt)))}</span>` : ''}${d === duty ? '<span class="duty-tag">plantão</span>' : ''}${open[d] ? `<small class="muted" style="display:block;font-size:11px">${fmtMin(open[d][0])}–${fmtMin(open[d][1])}</small>` : '<span class="closed-tag">fechada</span>'}</th>`).join('');
   let rows = '';
   for (let t = from; t < to; t += 60) {
     let tds = '';
@@ -2439,6 +2527,25 @@ function renderPrefs() {
       </div>
     </div>
   </section>
+  <section class="panel">
+    <h3>Feriados</h3>
+    <p>Os feriados nacionais (incluindo os que mudam com a Páscoa) são marcados na escala. Indica a localidade para juntar o feriado municipal — confirma sempre a data, que varia de concelho para concelho.</p>
+    <div class="rules-form">
+      <div class="field-inline"><label class="toggle" for="hol-on" style="padding:0;border:0;background:none"><span><b>Marcar feriados nacionais</b></span><input type="checkbox" class="switch" id="hol-on" data-hol="holidays" ${C.holidays === false ? '' : 'checked'} ${ro}></label></div>
+      <div class="field-inline"><label for="hol-town">Localidade</label><input type="text" id="hol-town" data-hol="town" value="${esc(C.town || '')}" list="towns" maxlength="60" placeholder="Ex.: Lisboa" ${ro}><datalist id="towns">${Object.keys(TOWN_HOLIDAYS).filter(k => k === k.normalize('NFC')).map(k => `<option value="${esc(k[0].toUpperCase() + k.slice(1))}">`).join('')}</datalist><small>Ao escrever uma localidade conhecida, a data é preenchida automaticamente</small></div>
+      <div class="field-inline"><label for="hol-town-day">Feriado municipal (dia-mês)</label><input type="text" id="hol-town-day" data-hol="townHoliday" value="${esc(C.townHoliday ? fmtMD(C.townHoliday) : '')}" placeholder="13-06" maxlength="5" ${ro}><small>Em branco não marca nenhum</small></div>
+    </div>
+    <div style="margin-top:14px">
+      <b style="font-size:13px">Outros feriados ou encerramentos</b>
+      ${(C.extraHolidays || []).length ? `<div class="cfg-wrap" style="margin-top:8px"><table class="cfg"><thead><tr><th>Data</th><th>Nome</th><th></th></tr></thead><tbody>${(C.extraHolidays || []).map((h, i) => `<tr>
+        <td><input type="text" data-hol="extra-date" data-i="${i}" value="${esc(h.date || '')}" placeholder="24-12 ou 2026-12-24" maxlength="10" ${ro}></td>
+        <td><input type="text" data-hol="extra-name" data-i="${i}" value="${esc(h.name || '')}" maxlength="40" ${ro}></td>
+        <td><button class="btn danger icon" data-action="hol-remove" data-i="${i}" ${ro}>✕</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+      <div style="margin-top:8px"><button class="btn" data-action="hol-add" ${ro}>Acrescentar feriado</button></div>
+      <p class="hint">Uma data sem ano (13-06) repete-se todos os anos; com ano (2026-12-24) é só nesse.</p>
+    </div>
+    <p class="hint" style="margin-top:12px">Nesta semana: ${(() => { const mon = parseISO(state.week); const f = [...Array(7)].map((_, d) => ({ d, n: holidayOn(iso(addDays(mon, d))) })).filter(x => x.n); return f.length ? f.map(x => `${DAYS_LONG[x.d]} — ${esc(x.n)}`).join(' · ') : 'sem feriados'; })()}</p>
+  </section>
   ${state.mode === 'api' && admin ? renderUpdatePanel() : ''}
   <section class="panel data-io">
     <h3>Dados</h3>
@@ -2536,15 +2643,13 @@ let menuCtx = null;
 function openMenu(btn) {
   const id = btn.dataset.id, d = +btn.dataset.d, e = state.employees[id], wk = state.week;
   const cur = getCell(wk, id, d);
-  const extraOpts = `<button class="opt ${cur?.vac ? 'cur' : ''}" role="menuitem" data-action="vacation" data-on="${cur?.vac ? '' : '1'}">
-      <span class="dot tone-vac"></span>
-      <span><b>Férias</b><small>${cur?.vac ? 'clica para retirar' : 'dia de férias'}</small></span></button>
-    <button class="opt ${cur?.sick ? 'cur' : ''}" role="menuitem" data-action="sick" data-on="${cur?.sick ? '' : '1'}">
-      <span class="dot tone-sick"></span>
-      <span><b>Baixa médica</b><small>${cur?.sick ? 'clica para retirar' : 'falta justificada por baixa'}</small></span></button>
-    <button class="opt ${cur?.xoff ? 'cur' : ''}" role="menuitem" data-action="xoff" data-on="${cur?.xoff ? '' : '1'}">
-      <span class="dot tone-xoff"></span>
-      <span><b>Folga extra do plantão</b><small>${cur?.xoff ? 'clica para retirar' : 'pela noite de serviço ao fim de semana'}</small></span></button>`;
+  /* Estado do dia em ícones (férias, baixa, folga extra, bloqueio), para não gastar uma linha cada. */
+  const stateIcons = `<span class="head-acts">
+      <button class="hact ${cur?.vac ? 'cur' : ''}" data-action="vacation" data-on="${cur?.vac ? '' : '1'}" title="${cur?.vac ? 'Retirar as férias' : 'Marcar férias'}" aria-label="Férias">🏖</button>
+      <button class="hact ${cur?.sick ? 'cur' : ''}" data-action="sick" data-on="${cur?.sick ? '' : '1'}" title="${cur?.sick ? 'Retirar a baixa' : 'Marcar baixa médica'}" aria-label="Baixa médica">🩺</button>
+      <button class="hact ${cur?.xoff ? 'cur' : ''}" data-action="xoff" data-on="${cur?.xoff ? '' : '1'}" title="${cur?.xoff ? 'Retirar a folga extra' : 'Folga extra do plantão'}" aria-label="Folga extra do plantão">★</button>
+      <button class="hact ${cur?.lock ? 'cur' : ''}" data-action="lock" data-on="${cur?.lock ? '' : '1'}" title="${cur?.lock ? 'Desbloquear a célula' : 'Bloquear: nada altera esta célula'}" aria-label="Bloquear">${cur?.lock ? '🔒' : '🔓'}</button>
+    </span>`;
   /* Extras: em vez de turnos, indica-se quantas horas fez e, se quiseres, a que horas entrou. */
   let extraPick = '';
   if (e.extra) {
@@ -2561,10 +2666,10 @@ function openMenu(btn) {
     const iss = sh ? cellIssues(e, id, wk, d, { s: sh.id, sh, l: cur?.sh?.id === sh.id ? cur.l : '' }, getCell, true).filter(i => i.msg !== 'Sem hora de almoço marcada') : [];
     const w = worstOf(iss), isCur = sh ? cur?.sh?.id === sh.id : !cur || (!cur.sh && !cur.hrs && !cur.bank && !cur.vac && !cur.sick && !cur.xoff);
     const h = sh ? hoursOf(sh, '') : null;
-    return `<button class="opt ${isCur ? 'cur' : ''}" role="menuitem" data-action="pick" data-code="${sh ? esc(sh.id) : ''}">
+    const aviso = iss.length ? `<em class="lvl-${w}" title="${esc(iss.map(i => i.msg).join(' · '))}">${w === 'bad' ? '✕' : '!'}</em>` : '';
+    return `<button class="opt ${isCur ? 'cur' : ''}" role="menuitem" data-action="pick" data-code="${sh ? esc(sh.id) : ''}" title="${sh ? esc(sh.name) + (iss.length ? ' — ' + esc(iss.map(i => i.msg).join(' · ')) : '') : 'Folga'}">
       <span class="dot ${sh ? toneOf(sh) : 'tone-off'}"></span>
-      <span><b>${sh ? esc(sh.name) : 'Folga'}</b><small>${sh ? `${sh.start}–${sh.end}${h.dbl ? ` · ${fmtH(h.pay)} h` : ''}` : 'sem turno'}</small>
-      ${iss.length ? `<em class="lvl-${w}">${iss.map(i => esc(i.msg)).join('<br>')}</em>` : ''}</span></button>`;
+      <b>${sh ? `${sh.start}–${sh.end}` : 'Folga'}</b>${aviso}</button>`;
   }).join('');
   /* Horas do dia de plantão: pagas ou para o banco */
   let dutyPick = '';
@@ -2595,8 +2700,8 @@ function openMenu(btn) {
     lunch = `<div class="lunch-pick"><p>Hora de almoço (${fmtDur(dur)})${cur.post === 'back' ? ` · em backoffice é ${backLunchAt()}` : ''} · ·n = colegas já a almoçar</p><div>${chips || '<em class="lvl-warn">Este turno não apanha o intervalo de almoço com esta duração.</em>'}</div></div>${durChips}`;
   }
   const st = weekStats(id, wk);
-  const head = `<div class="menu-head">${esc(e.name)} · ${DAYS_LONG[d]} ${addDays(parseISO(wk), d).getDate()}`
-    + `<br>Semana: ${st.target ? `${fmtH(st.credited)} de ${fmtH(st.target)} h${st.missing ? ` · faltam ${fmtH(st.missing)} h` : ''}` : `${fmtH(st.credited)} h${e.extra ? ' · extra, sem mínimo' : ''}`}</div>`;
+  const head = `<div class="menu-head"><span><b>${esc(e.name.split(' ')[0])}</b> · ${DAYS[d]} ${addDays(parseISO(wk), d).getDate()}`
+    + `<small>Semana: ${st.target ? `${fmtH(st.credited)}/${fmtH(st.target)} h${st.missing ? ` · faltam ${fmtH(st.missing)}` : ''}` : `${fmtH(st.credited)} h`}</small></span>${stateIcons}</div>`;
   /* Ajuste do dia: horas a menos (sai mais cedo) ou a mais (fica mais tempo), de meia em meia hora. */
   let lessPick = '';
   if (cur?.sh) {
@@ -2616,12 +2721,14 @@ function openMenu(btn) {
       <button class="lchip ${cur.post === 'back' ? 'cur' : ''}" data-action="post" data-post="back">Backoffice</button>
     </div></div>`;
   }
-  const lockOpt = `<button class="opt" role="menuitem" data-action="lock" data-on="${cur?.lock ? '' : '1'}">
-      <span class="dot" style="background:var(--ink-3)"></span>
-      <span><b>${cur?.lock ? 'Desbloquear' : 'Bloquear'}</b><small>${cur?.lock ? 'volta a poder ser alterada' : 'nada altera esta célula (nem gerar, nivelar, copiar ou limpar) até ser desbloqueada'}</small></span></button>`;
+  /* Secções em separadores: mostra-se só a que está escolhida, para o menu ficar curto. */
+  const secs = [['posto', 'Posto', postPick], ['ajuste', 'Ajuste', lessPick], ['almoço', 'Almoço', lunch], ['plantão', 'Plantão', dutyPick], ['banco', 'Banco', e.extra ? '' : bankPick]].filter(x => x[2]);
+  if (!secs.some(x => x[0] === state.menuSec)) state.menuSec = secs[0]?.[0] || '';
+  const tabs = secs.length ? `<div class="menu-tabs">${secs.map(([k, n]) => `<button class="mtab ${state.menuSec === k ? 'cur' : ''}" data-action="menu-sec" data-k="${k}">${n}</button>`).join('')}</div>` : '';
+  const corpo = secs.filter(([k]) => k === state.menuSec).map(x => x[2]).join('');
   menu.innerHTML = cur?.lock
-    ? `${head}<div class="locknote">🔒 Célula bloqueada — desbloqueia para alterar.</div>${lockOpt}`
-    : `${head}${extraPick}${opts}${extraOpts}${lockOpt}${postPick}${lessPick}${dutyPick}${lunch}${e.extra ? '' : bankPick}`;
+    ? `${head}<div class="locknote">🔒 Bloqueada — carrega no cadeado para alterar.</div>`
+    : `${head}${extraPick}<div class="opts">${opts}</div>${tabs}${corpo}`;
   menu.hidden = false;
   const r = btn.getBoundingClientRect();
   const mw = menu.offsetWidth, mh = menu.offsetHeight;
@@ -2963,7 +3070,7 @@ document.addEventListener('click', async ev => {
   if (!el) { if (!ev.target.closest('#menu')) closeMenu(); return; }
   const a = el.dataset.action;
   if (['my-avatar', 'my-password', 'logout'].includes(a)) state.userMenuOpen = false;
-  if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation', 'sick', 'xoff', 'lock', 'less', 'adj', 'extra-hours', 'lunch-len'].includes(a)) closeMenu();
+  if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation', 'sick', 'xoff', 'lock', 'less', 'adj', 'extra-hours', 'lunch-len', 'menu-sec'].includes(a)) closeMenu();
   switch (a) {
     case 'tab': state.tab = el.dataset.tab; ls.set('escala.tab', state.tab); render(); window.scrollTo(0, 0); break;
     case 'logout':
@@ -2985,6 +3092,7 @@ document.addEventListener('click', async ev => {
       toast(THEMES.find(([k]) => k === currentTheme)[1]);
       break;
     }
+    case 'menu-sec': { state.menuSec = el.dataset.k; if (menuCtx?.btn) openMenu(menuCtx.btn); break; }
     case 'user-menu': state.userMenuOpen = !state.userMenuOpen; $('#whoami').innerHTML = userMenuHTML(); break;
     case 'my-avatar': openAvatar(); break;
     case 'close-av': $('#avdlg').close(); break;
@@ -3146,6 +3254,17 @@ document.addEventListener('click', async ev => {
       state.cfgDraft = clone(DEFAULT_CONFIG); state.cfgDirty = true; render(); break;
     case 'cfg-discard': state.cfgDraft = null; state.cfgDirty = false; render(); break;
     case 'pref-discard': state.prefsDraft = null; render(); break;
+    case 'hol-add': {
+      const c = { ...cfg(), extraHolidays: [...(cfg().extraHolidays || []), { date: '', name: '' }] };
+      if (await store.send('api/config', 'PUT', c)) { state.config = c; render(); }
+      break;
+    }
+    case 'hol-remove': {
+      const lista = (cfg().extraHolidays || []).filter((_, i) => i !== +el.dataset.i);
+      const c = { ...cfg(), extraHolidays: lista };
+      if (await store.send('api/config', 'PUT', c)) { state.config = c; render(); }
+      break;
+    }
     case 'pref-logo-pick': { const f = $('#pref-logo'); f.value = ''; f.click(); break; }
     case 'pref-logo-clear': {
       state.prefsDraft = { ...(state.prefsDraft || { siteTitle: cfg().siteTitle || '', siteTagline: cfg().siteTagline || '' }), siteLogo: '' };
@@ -3453,6 +3572,24 @@ document.addEventListener('input', ev => {
 });
 document.addEventListener('change', async ev => {
   const t = ev.target;
+  if (t.dataset?.hol) {
+    const c = { ...cfg() }, k = t.dataset.hol;
+    if (k === 'holidays') c.holidays = t.checked;
+    else if (k === 'town') {
+      c.town = t.value.trim().slice(0, 60);
+      const conhecido = TOWN_HOLIDAYS[c.town.toLowerCase()];
+      if (conhecido && !normalizeMD(cfg().townHoliday)) c.townHoliday = conhecido[0];
+    } else if (k === 'townHoliday') c.townHoliday = normalizeMD(t.value);
+    else if (k.startsWith('extra-')) {
+      const lista = (cfg().extraHolidays || []).map(x => ({ ...x })), i = +t.dataset.i;
+      if (!lista[i]) return;
+      if (k === 'extra-date') { const v = t.value.trim(); lista[i].date = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : normalizeMD(v); }
+      else lista[i].name = t.value.slice(0, 40);
+      c.extraHolidays = lista;
+    }
+    if (await store.send('api/config', 'PUT', c)) { state.config = c; render(); toast('Feriados guardados.'); }
+    return;
+  }
   if (t.id === 'pref-updateCheck') {
     const c = { ...cfg(), updateCheck: t.value };
     if (state.cfgDraft) state.cfgDraft.updateCheck = t.value;

@@ -58,6 +58,11 @@ DEFAULT_SETTINGS = {
     "lunchMax": 120,
     # Quem está em backoffice almoça sempre a esta hora, com a duração mínima.
     "backLunchAt": "12:00",
+    # Feriados: nacionais, o municipal da localidade e os acrescentados à mão.
+    "holidays": True,
+    "town": "",
+    "townHoliday": "",
+    "extraHolidays": [],
     "minPresent": 3,
     "minRest": 11,
     "doubleFrom": "22:00",
