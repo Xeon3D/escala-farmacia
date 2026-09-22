@@ -4,6 +4,9 @@ Cada versão tem um cabeçalho `## versão — data` e uma lista de pontos. A ap
 aos administradores as entradas mais recentes do que a versão instalada quando procura
 atualizações.
 
+## 1.6.10 — 2026-09-23
+- Horários de 4 h ou menos deixam de ter almoço, na escala e na contagem de horas.
+
 ## 1.6.9 — 2026-09-23
 - Ajuste de horas do dia nos dois sentidos, com − e + na célula e horário efetivo à vista.
 - Feriados nacionais, do concelho e personalizados marcados na escala.
