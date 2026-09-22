@@ -264,8 +264,12 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
 
 - **Turnos**: entradas às 9h, 10h e 11h (8 h de trabalho + 1 h de almoço) e noite de
   serviço das 19:00 às 07:00. Tudo editável no separador *Turnos*.
-- **Almoço**: 60 min, a começar entre as 12:00 e as 15:00 (termina até às 16:00),
-  desencontrado entre colegas.
+- **Almoço**: duração entre um mínimo e um máximo (1 h a 2 h por omissão), a começar
+  dentro do intervalo definido (12:00–16:00) e desencontrado entre colegas. A duração de
+  cada dia escolhe-se no menu da célula; a geração usa almoços mais longos para acertar as
+  horas da semana, em vez de tirar um dia de trabalho a quem fica acima do alvo. **Quem
+  está em backoffice almoça sempre à mesma hora** (13:00 por omissão), com a duração
+  mínima.
 - **Horas nocturnas**: as horas entre as 22:00 e as 09:00 **não entram nas horas
   trabalhadas** — ficam à parte, na coluna «horas nocturnas», e pagam-se a dobrar. Na
   noite de serviço das 19:00 às 07:00 só as 3 h das 19:00 às 22:00 contam como
