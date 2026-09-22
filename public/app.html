@@ -924,16 +924,16 @@ function shiftOn(sh, d, wk = state.week) {
     const inicio = weekendNightStart();
     return d >= 5 && inicio !== sh.start ? { ...sh, start: inicio, weekendNight: true } : sh;
   }
-  if (sh.onlyDuty || sh.back) return sh;
+  if (sh.onlyDuty || sh.back) return withLunchRule(sh);
   const o = openingOf(d, wk);
-  if (o.closed) return sh;
+  if (o.closed) return withLunchRule(sh);
   const [a, b] = span(sh), [oa, ob] = openSpan(d, wk);
   const s = Math.max(a, oa), e = Math.min(b, ob);
-  if (e <= s || (s === a && e === b)) return sh; // sem sobreposição (fica o aviso) ou já dentro do horário
+  if (e <= s || (s === a && e === b)) return withLunchRule(sh); // sem sobreposição (fica o aviso) ou já dentro do horário
   const cut = { ...sh, start: fmtMin(s), end: fmtMin(e), clipped: true };
-  /* Turno curto não tem almoço, e o almoço só faz sentido se couber dentro do horário. */
+  /* Turno de 4 h ou menos não tem almoço, e o almoço só faz sentido se couber dentro do horário. */
   const C = cfg(), lm = lunchMinLen();
-  cut.lunch = !!sh.lunch && (e - s) >= 6 * 60 && Math.min(toMin(C.lunchTo), e) - Math.max(toMin(C.lunchFrom), s) >= lm;
+  cut.lunch = !!sh.lunch && (e - s) > LUNCH_MIN_SPAN && Math.min(toMin(C.lunchTo), e) - Math.max(toMin(C.lunchFrom), s) >= lm;
   return cut;
 }
 /** O turno chega a apanhar o horário de abertura desse dia? */
@@ -972,6 +972,11 @@ const saturdayPeople = () => Math.max(0, +cfg().saturdayPeople || 0);
 const sortedShifts = () => cfg().shifts.slice().sort((a, b) => (a.night - b.night) || toMin(a.start) - toMin(b.start));
 
 /* ---------- Almoço: duração entre um mínimo e um máximo ---------- */
+/** Horários de 4 h ou menos não dão direito a almoço. */
+const LUNCH_MIN_SPAN = 4 * 60;
+function lunchDue(sh) { if (!sh?.lunch) return false; const [a, b] = span(sh); return b - a > LUNCH_MIN_SPAN; }
+/** O turno tal como fica depois da regra do turno curto. */
+function withLunchRule(sh) { return sh && sh.lunch && !lunchDue(sh) ? { ...sh, lunch: false } : sh; }
 const lunchMinLen = () => Math.max(0, +cfg().lunchMin || 0);
 const lunchMaxLen = () => Math.max(lunchMinLen(), +cfg().lunchMax || lunchMinLen());
 /** Durações possíveis do almoço, de 30 em 30 minutos. */
@@ -2121,7 +2126,7 @@ function renderSchedule() {
         <dt>Horário</dt><dd>${esc(openingSummary())}. Os turnos terminam à hora de fecho; num dia fechado só trabalha o plantão. Quando o plantão calha ao fim de semana, esse dia abre até às ${esc(weekendNightStart())}, com ${saturdayPeople()} ${saturdayPeople() === 1 ? 'pessoa' : 'pessoas'}, e a noite de serviço segue a partir daí</dd>
         <dt>Plantão</dt><dd>${DAYS_LONG[duty]} nesta semana; recua ${C.dutyStep === 1 ? 'um dia' : `${C.dutyStep} dias`} por semana</dd>
         <dt>Horas nocturnas</dt><dd>Entre ${C.doubleFrom} e ${C.doubleTo} não contam como trabalhadas: são horas nocturnas, pagas à parte ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}. Quem faz a noite de serviço soma só ${fmtH(hoursOf(cfg().shifts.find(x => x.night) || { start: '19:00', end: '22:00' }, '').normal)} h à semana</dd>
-        <dt>Almoço</dt><dd>${lunchMaxLen() > lunchMinLen() ? `entre ${fmtDur(lunchMinLen())} e ${fmtDur(lunchMaxLen())}` : `${lunchMinLen()} min`}, a começar entre ${C.lunchFrom} e ${fmtMin(toMin(C.lunchTo) - lunchMinLen())}. Em backoffice é sempre às ${esc(backLunchAt())}</dd>
+        <dt>Almoço</dt><dd>${lunchMaxLen() > lunchMinLen() ? `entre ${fmtDur(lunchMinLen())} e ${fmtDur(lunchMaxLen())}` : `${lunchMinLen()} min`}, a começar entre ${C.lunchFrom} e ${fmtMin(toMin(C.lunchTo) - lunchMinLen())}. Em backoffice é sempre às ${esc(backLunchAt())}. Horários de 4 h ou menos não têm almoço</dd>
         <dt>Balcão</dt><dd>Pelo menos ${C.minPresent} ${+C.minPresent === 1 ? 'pessoa' : 'pessoas'} durante o horário de abertura${bandsTxt ? ` (${bandsTxt})` : ''}</dd>
         <dt>Férias e baixa</dt><dd>Dias de férias ou de baixa médica não recebem turnos e descontam ${fmtH(dayHours())} h ao mínimo da semana</dd>
         <dt>Descanso</dt><dd>Mínimo de ${C.minRest} h entre o fim de um turno e o início do seguinte</dd>
@@ -2364,7 +2369,7 @@ function cfgWarnings(c) {
     const nm = s.name || '(sem nome)';
     if (!String(s.name || '').trim()) w.push('Há um turno sem nome.');
     if (!validTime(s.start) || !validTime(s.end)) w.push(`${nm}: indica a hora de início e de fim.`);
-    else if (s.lunch) {
+    else if (lunchDue(s)) {
       const [a, b] = span(s), from = Math.max(toMin(c.lunchFrom), a), to = Math.min(toMin(c.lunchTo), b);
       if (to - from < c.lunchMin) w.push(`${nm}: o turno não apanha ${c.lunchMin} min dentro do intervalo de almoço (${c.lunchFrom}–${c.lunchTo}).`);
     }
@@ -2400,7 +2405,7 @@ function openingCoverage(c, o, d) {
 }
 function shiftHoursLabel(s, c) {
   const [a, b] = span(s);
-  const lm = s.lunch ? (+c.lunchMin || 0) : 0;
+  const lm = lunchDue(s) ? (+c.lunchMin || 0) : 0;
   const df = toMin(c.doubleFrom || '22:00'); let dt = toMin(c.doubleTo || '09:00'); if (dt <= df) dt += 1440;
   let dbl = 0; for (const k of [-1, 0, 1]) dbl += Math.max(0, Math.min(b, dt + k * 1440) - Math.max(a, df + k * 1440));
   const work = (b - a - lm) / 60, d = dbl / 60;
