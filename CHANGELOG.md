@@ -4,6 +4,10 @@ Cada versão tem um cabeçalho `## versão — data` e uma lista de pontos. A ap
 aos administradores as entradas mais recentes do que a versão instalada quando procura
 atualizações.
 
+## 1.6.8 — 2026-09-22
+- Backoffice: horário fixo das 09:00 às 18:00 com almoço das 12:00 às 13:00, sempre respeitado pela geração.
+- O menu da célula deixa de fechar a cada escolha — fecha só ao clicar fora.
+
 ## 1.6.7 — 2026-09-22
 - Almoço entre 1 h e 2 h, à escolha em cada dia; a geração usa-o para acertar as horas da semana.
 - Quem está em backoffice almoça sempre às 13:00.
