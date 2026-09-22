@@ -793,11 +793,17 @@ function weekdayOpening() {
   for (let d = 0; d < 5; d++) { const o = openingRaw(d); if (!o.closed) return o; }
   return { open: '09:00', close: '19:30', closed: false };
 }
-/** Quando o plantão calha ao fim de semana, a farmácia abre nesse dia com o horário de um dia útil. */
-const dutyWeekend = (wk = state.week) => dutyDay(wk) >= 5;
+/** Hora a que começa a noite de serviço ao fim de semana. */
+const weekendNightStart = () => normalizeTime(cfg().nightWeekendStart) || DEFAULT_CONFIG.nightWeekendStart;
+/** Quando o plantão calha ao fim de semana, esse dia abre desde a hora normal de abertura
+ *  até à hora a que entra a noite de serviço (por omissão 09:00–18:00); a noite segue daí
+ *  até de manhã. O domingo, normalmente fechado, abre nesse dia. */
 function openingOf(d, wk = state.week) {
   d = ((d % 7) + 7) % 7;
-  if (d >= 5 && d === dutyDay(wk)) return weekdayOpening();
+  if (d >= 5 && d === dutyDay(wk)) {
+    const base = openingRaw(d);
+    return { open: base.closed ? weekdayOpening().open : base.open, close: weekendNightStart(), closed: false };
+  }
   return openingRaw(d);
 }
 /* Num dia fechado só trabalha quem faz o turno de plantão. */
@@ -809,7 +815,7 @@ function shiftOn(sh, d, wk = state.week) {
   d = ((d % 7) + 7) % 7;
   /* A noite de serviço ao fim de semana começa mais cedo. */
   if (sh.night) {
-    const inicio = normalizeTime(cfg().nightWeekendStart) || DEFAULT_CONFIG.nightWeekendStart;
+    const inicio = weekendNightStart();
     return d >= 5 && inicio !== sh.start ? { ...sh, start: inicio, weekendNight: true } : sh;
   }
   if (sh.onlyDuty || sh.back) return sh;
@@ -1312,9 +1318,14 @@ function lunchesOn(wk, d, exceptId) {
 /* ---------- Presença ao balcão ---------- */
 /** Mínimo de pessoas ao balcão a uma dada hora (em minutos), tendo em conta os períodos com outro mínimo. */
 /** Ao sábado o mínimo ao balcão é o número de pessoas previstas para o sábado; nos outros dias, o geral e as faixas. */
-/* Ao sábado o mínimo é o número de pessoas do sábado — exceto se o plantão calhar nesse dia,
-   em que a farmácia abre como num dia útil e vale o mínimo geral. */
-const minFor = (d, t, wk = state.week) => (((d % 7) + 7) % 7 === 5 && dutyDay(wk) !== 5 ? saturdayPeople() : minAt(t));
+/* Ao fim de semana (sábado, ou o domingo em que calha o plantão) o mínimo ao balcão é o
+   número de «Pessoas ao sábado»; nos dias úteis vale o mínimo geral e as faixas horárias. */
+function minFor(d, t, wk = state.week) {
+  d = ((d % 7) + 7) % 7;
+  /* Ao fim de semana o mínimo é o número de «Pessoas ao sábado»; o reforço de manhã é
+     opcional (a geração escala-o se estiver definido, mas a falta dele não é conflito). */
+  return d >= 5 && !openingOf(d, wk).closed ? saturdayPeople() : minAt(t);
+}
 function minAt(t) {
   const C = cfg(), tt = ((t % 1440) + 1440) % 1440;
   for (const b of (Array.isArray(C.presenceBands) ? C.presenceBands : [])) {
@@ -1399,7 +1410,7 @@ function generate(wk, fromDay = 0) {
   /* Noites e sábados feitos nas últimas semanas, para rodar pela equipa. */
   const before = (id, test) => { let n = 0; for (let k = 1; k <= 6; k++) for (let d = 0; d < 7; d++) if (test(getCell(shiftWeek(wk, -k), id, d), d)) n++; return n; };
   const nightsBefore = id => before(id, c => c?.sh?.night);
-  const saturdaysBefore = id => before(id, (c, d) => d === 5 && worksOn(c) && !c.sh?.night);
+  const saturdaysBefore = id => before(id, (c, d) => d >= 5 && worksOn(c) && !c.sh?.night);
   const target = id => weeklyTarget(state.employees[id]);
   const dayShifts = sortedShifts().filter(sh => !sh.night && !sh.onlyDuty && !sh.back);
   const dd = dutyDay(wk);
@@ -1438,27 +1449,31 @@ function generate(wk, fromDay = 0) {
     }
   }
   /* Turno de dia que melhor cobre a abertura de um dia (o que apanha mais tempo aberto; empate → mais cedo). */
-  const bestFor = d => {
-    const [oa, ob] = openSpan(d, wk);
-    return dayShifts.filter(sh => shiftFits(sh, d, wk)).map(sh => { const [a, b] = span(sh); return { sh, cover: Math.min(b, ob) - Math.max(a, oa) }; })
-      .sort((x, y) => y.cover - x.cover || toMin(x.sh.start) - toMin(y.sh.start))[0]?.sh || null;
+  const bestFor = (d, until = null) => {
+    const [oa, ob0] = openSpan(d, wk), ob = until === null ? ob0 : Math.min(ob0, until);
+    /* Prefere quem cobre mais da janela e menos tempo fora dela (útil para um reforço só de manhã). */
+    return dayShifts.filter(sh => shiftFits(sh, d, wk)).map(sh => {
+      const [a, b] = span(shiftOn(sh, d, wk));
+      return { sh, score: (Math.min(b, ob) - Math.max(a, oa)) - (until === null ? 0 : Math.max(0, b - ob)) };
+    }).sort((x, y) => y.score - x.score || toMin(x.sh.start) - toMin(y.sh.start))[0]?.sh || null;
   };
-  /* 4. Sábado: só as pessoas previstas, a rodar por quem fez menos sábados. */
-  if (!isClosed(5, wk) && dd !== 5 && dayShifts.length && !frozen(5)) {
+  /* 4. Fim de semana: só as pessoas previstas, a rodar por quem fez menos fins de semana.
+        Inclui o domingo quando é dia de plantão (nesse dia a farmácia abre até à noite). */
+  for (const d of [5, 6]) {
+    if (isClosed(d, wk) || !dayShifts.length || frozen(d)) continue;
     const want = saturdayPeople();
-    let have = ids.filter(id => cells[id][5]?.s && !shiftById(cells[id][5].s)?.night).length;
-    const sh = bestFor(5);
+    let have = ids.filter(id => cells[id][d]?.s && !shiftById(cells[id][d].s)?.night).length;
+    const sh = bestFor(d);
     while (sh && have < want) {
-      const cands = ids.filter(id => !cells[id][5] && hardOk(id, 5, sh.id));
+      const cands = ids.filter(id => !cells[id][d] && hardOk(id, d, sh.id));
       if (!cands.length) break;
       cands.sort((a, b) => (saturdaysBefore(a) - saturdaysBefore(b)) || (hours[a] - hours[b]) || (Math.random() - 0.5));
-      put(cands[0], 5, sh.id); have++;
+      put(cands[0], d, sh.id); have++;
     }
   }
   /* 5. Segunda a sexta: cada pessoa trabalha os dias que faltam para as suas horas; quando tem dias a mais,
         folga nos dias com mais gente, para os dias ficarem equilibrados. Aqui só se decide QUEM trabalha em cada dia. */
-  /* Um plantão ao fim de semana abre como dia útil: esse dia entra na distribuição normal. */
-  const diasUteis = [0, 1, 2, 3, 4].concat(dd >= 5 ? [dd] : []);
+  const diasUteis = [0, 1, 2, 3, 4];
   if (dayShifts.length) {
     const headcount = d => ids.filter(id => cells[id][d]?.s && !shiftById(cells[id][d].s)?.night).length;
     const order = ids.slice().sort((a, b) => (target(a) - hours[a]) - (target(b) - hours[b])).reverse(); // quem tem mais horas em falta primeiro
@@ -1480,7 +1495,8 @@ function generate(wk, fromDay = 0) {
         possível ao longo da abertura, sem descer do mínimo de cada faixa. */
   const cellsLookup = (w, i, x) => lookup(w, i, x);
   for (let d = fromDay; d < 7; d++) {
-    if (isClosed(d, wk) || dayShifts.length < 2) continue;
+    /* Só de segunda a sexta: ao fim de semana os turnos são os escolhidos acima (dia inteiro + reforço de manhã). */
+    if (d >= 5 || isClosed(d, wk) || dayShifts.length < 2) continue;
     const [oa, ob] = openSpan(d, wk);
     const workers = ids.filter(id => cells[id][d]?.s && !held(id, d) && !shiftById(cells[id][d].s)?.night && !shiftById(cells[id][d].s)?.onlyDuty && !shiftById(cells[id][d].s)?.back && !normId(state.employees[id].fixed?.[d]));
     const others = ids.filter(id => cells[id][d]?.s && !workers.includes(id) && !shiftById(cells[id][d].s)?.night);
@@ -1768,10 +1784,13 @@ function renderSchedule() {
     }
     foot += `<tr><th scope="row"><span class="dot ${toneOf(sh)}"></span>${esc(sh.name)}<small>${sh.start}–${sh.end}${sh.onlyDuty ? ' · só no plantão' : ''}</small></th>${tds}<td class="tot"></td></tr>`;
   }
-  /* Sábado: só abre de manhã e precisa de um número fixo de pessoas. */
-  if (hasSched && !closed[5] && duty !== 5) {
-    const sat = ids.filter(id => { const c = getCell(wk, id, 5); return worksOn(c) && !c.sh?.night; }).length, want = saturdayPeople();
-    if (sat !== want) alerts.push({ lvl: sat < want ? 'bad' : 'warn', who: 'Sábado', when: `${DAYS[5]} ${days[5].getDate()}`, msg: `${sat} ${sat === 1 ? 'pessoa' : 'pessoas'} escaladas, ${want} ${want === 1 ? 'prevista' : 'previstas'}` });
+  /* Fim de semana: cada dia aberto precisa do número de pessoas previsto. */
+  for (const d of [5, 6]) {
+    if (!hasSched || closed[d]) continue;
+    const n = ids.filter(id => { const c = getCell(wk, id, d); return worksOn(c) && !c.sh?.night; }).length;
+    const want = saturdayPeople();
+    /* Uma pessoa a mais é sempre uma opção tua — só se avisa quando faltam. */
+    if (n < want) alerts.push({ lvl: 'bad', who: DAYS_LONG[d], when: `${DAYS[d]} ${days[d].getDate()}`, msg: `${n} ${n === 1 ? 'pessoa escalada' : 'pessoas escaladas'}, ${want} ${want === 1 ? 'prevista' : 'previstas'}` });
   }
 
   const pres = days.map((_, d) => presence(wk, d, ids));
@@ -1894,7 +1913,7 @@ function renderSchedule() {
       <h2>Regras da escala</h2>
       <dl>
         ${shiftsTxt}
-        <dt>Horário</dt><dd>${esc(openingSummary())}. Os turnos terminam à hora de fecho; num dia fechado só trabalha o plantão. Quando o plantão calha ao fim de semana, esse dia abre com o horário de um dia útil (${weekdayOpening().open}–${weekdayOpening().close})</dd>
+        <dt>Horário</dt><dd>${esc(openingSummary())}. Os turnos terminam à hora de fecho; num dia fechado só trabalha o plantão. Quando o plantão calha ao fim de semana, esse dia abre até às ${esc(weekendNightStart())}, com ${saturdayPeople()} ${saturdayPeople() === 1 ? 'pessoa' : 'pessoas'}, e a noite de serviço segue a partir daí</dd>
         <dt>Plantão</dt><dd>${DAYS_LONG[duty]} nesta semana; recua ${C.dutyStep === 1 ? 'um dia' : `${C.dutyStep} dias`} por semana</dd>
         <dt>Horas nocturnas</dt><dd>Entre ${C.doubleFrom} e ${C.doubleTo} não contam como trabalhadas: são horas nocturnas, pagas à parte ${+C.doubleFactor === 2 ? 'a dobrar' : `×${C.doubleFactor}`}. Quem faz a noite de serviço soma só ${fmtH(hoursOf(cfg().shifts.find(x => x.night) || { start: '19:00', end: '22:00' }, '').normal)} h à semana</dd>
         <dt>Almoço</dt><dd>${C.lunchMin} min, a começar entre ${C.lunchFrom} e ${fmtMin(toMin(C.lunchTo) - C.lunchMin)}</dd>
@@ -2261,7 +2280,7 @@ function renderSettings() {
         <small>Ex.: das 12:00 às 16:00 chegam 2 pessoas ao balcão. Fora destes períodos vale o mínimo geral.</small>
       </div>
       <div class="field-inline"><label for="cfg-nightWeekendStart">Noite ao fim de semana começa às</label>${timeInput('cfg-nightWeekendStart', c.nightWeekendStart, 'Hora de início da noite de serviço ao fim de semana', 'data-cfg="rule" data-k="nightWeekendStart"', ro)}<small>Ao sábado e ao domingo a noite de serviço começa a esta hora; nos dias úteis vale a hora do turno</small></div>
-      <div class="field-inline"><label for="cfg-saturdayPeople">Pessoas ao sábado</label><input type="number" id="cfg-saturdayPeople" data-cfg="rule" data-k="saturdayPeople" value="${+c.saturdayPeople || 0}" min="0" max="20" ${ro}><small>Quantas pessoas a geração escala ao sábado; é também o mínimo ao balcão nesse dia (o mínimo geral não se aplica)</small></div>
+      <div class="field-inline"><label for="cfg-saturdayPeople">Pessoas ao sábado</label><input type="number" id="cfg-saturdayPeople" data-cfg="rule" data-k="saturdayPeople" value="${+c.saturdayPeople || 0}" min="0" max="20" ${ro}><small>Quantas pessoas a geração escala ao sábado — e ao domingo, quando calha o plantão; é também o mínimo ao balcão nesses dias. Se precisares de mais uma nalgum dia, acrescenta-a à mão na escala</small></div>
       <div class="field-inline"><label for="cfg-backofficePerDay">Backoffice por dia</label><input type="number" id="cfg-backofficePerDay" data-cfg="rule" data-k="backofficePerDay" value="${+c.backofficePerDay || 0}" min="0" max="10" ${ro}><small>Pessoas fora do balcão, que podem reforçar nas horas de ponta</small></div>
       <div class="field-inline"><label for="cfg-weeklyHours">Horas por semana</label><input type="number" id="cfg-weeklyHours" data-cfg="rule" data-k="weeklyHours" value="${+c.weeklyHours || 0}" min="0" max="80" step="0.5" ${ro}><small>Mínimo de cada pessoa, salvo valor próprio na ficha</small></div>
       <div class="field-inline"><label for="cfg-dayHours">Dia completo (h)</label><input type="number" id="cfg-dayHours" data-cfg="rule" data-k="dayHours" value="${+c.dayHours || 8}" min="1" max="24" step="0.5" ${ro}><small>Descontar isto do banco num dia equivale a uma folga</small></div>

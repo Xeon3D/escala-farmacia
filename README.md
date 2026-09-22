@@ -251,9 +251,11 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
   horário de abertura não é pedido nesse dia.
 - O gráfico «Ao balcão» e o mínimo de pessoas cobrem só o horário de abertura desse dia.
 - **Plantão ao fim de semana**: quando o plantão calha a sábado ou domingo, esse dia abre
-  com o **horário de um dia útil** (e o domingo, normalmente fechado, abre) e a noite de
-  serviço segue até à hora de fecho do turno — por omissão as 09:00 do dia seguinte. Nesse
-  dia vale o mínimo geral ao balcão, não as «Pessoas ao sábado».
+  desde a hora normal de abertura **até à hora a que entra a noite de serviço** (09:00–18:00
+  por omissão) e o domingo, normalmente fechado, abre. A noite segue daí até de manhã
+  (09:00). Nesses dias valem as «Pessoas ao sábado» (2) como número escalado e mínimo ao
+  balcão; se precisares de mais alguém num período (por exemplo de manhã), acrescenta-o à
+  mão na escala.
 - A coluna «Cobertura dos turnos» avisa se os turnos definidos deixam parte do horário
   de abertura sem ninguém.
 
@@ -274,8 +276,8 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
      (nivelamento automático, sem descer do mínimo de cada faixa).
   2. **Sábado** — só abre de manhã e escala apenas as «Pessoas ao sábado» (2 por omissão),
      a rodar por quem fez menos sábados.
-  3. **Domingo** — fechado; quando o plantão calha ao domingo, esse dia abre como um dia
-     útil e é escalado como tal, mais a noite de serviço.
+  3. **Domingo** — fechado; quando o plantão calha ao domingo, abre das 09:00 às 18:00 com
+     as mesmas pessoas do sábado, mais a noite de serviço.
   Em cada cabeçalho de dia há um botão ↻ **«gerar a partir daqui»**: os dias anteriores
   ficam como estão e a escala é refeita desse dia até domingo.
   O plantão é sempre o primeiro a ser atribuído (a rodar por quem fez menos noites). Quando
