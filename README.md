@@ -206,7 +206,7 @@ exportação e importação em JSON.
   Descontar o equivalente a um dia (8 h por omissão) transforma o dia numa folga paga
   pelo banco. A aplicação avisa se o saldo não chega.
 - **Férias**: marcam-se dia a dia no menu da célula, ou de uma vez no botão *Férias* da
-  ficha, indicando o período. Dias de férias não recebem turnos na geração automática e
+  ficha, indicando o período. *Limpar semana* não as apaga (nem as baixas médicas). Dias de férias não recebem turnos na geração automática e
   descontam um dia ao mínimo dessa semana.
 - **Bloquear**: no menu da célula, «Bloquear» fixa o que lá está (turno, folga, férias…):
   nada a altera — nem gerar, nivelar, copiar a semana anterior ou

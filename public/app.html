@@ -3376,10 +3376,16 @@ document.addEventListener('click', async ev => {
       render(); toast('Turnos copiados. Atenção: o plantão desta semana é ' + DAYS_LONG[dutyDay(state.week)].toLowerCase() + '.'); break;
     }
     case 'clear':
-      if (!await confirmBox('Limpar semana', `Remover todos os turnos de ${weekRange(state.week)}? As células bloqueadas ficam.`, 'Limpar', true)) break;
+      if (!await confirmBox('Limpar semana', `Remover todos os turnos de ${weekRange(state.week)}? Ficam as células bloqueadas, as férias e as baixas médicas.`, 'Limpar', true)) break;
       {
         const keep = {}, atual = state.schedules[state.week]?.cells || {};
-        for (const id in atual) for (const d in atual[id]) if (atual[id][d]?.lock) (keep[id] = keep[id] || {})[d] = clone(atual[id][d]);
+        for (const id in atual) for (const d in atual[id]) {
+          const c = atual[id][d];
+          if (!c || typeof c === 'string') continue;
+          if (c.lock) { (keep[id] = keep[id] || {})[d] = clone(c); continue; }
+          /* Férias e baixas são ausências marcadas à mão: limpar a semana não as apaga. */
+          if (c.vac || c.sick) (keep[id] = keep[id] || {})[d] = c.vac ? { vac: true } : { sick: true };
+        }
         store.saveWeek(state.week, { cells: keep, updatedAt: new Date().toISOString() });
       }
       render(); toast('Semana limpa.'); break;
