@@ -25,7 +25,8 @@
   --sans:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
 }
-@media (prefers-color-scheme: dark){
+/* O tema escuro é só para o ecrã: na impressão sai sempre a paleta clara. */
+@media screen and (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#0E1513; --surface:#151F1C; --surface-2:#1C2926; --ink:#E4EDEA; --ink-2:#A2B4AE; --ink-3:#72857F; --line:#293733;
     --accent:#3CBF92; --accent-2:#5FD3A9; --accent-soft:#16342A; --on-accent:#06231A;
@@ -46,6 +47,7 @@
     --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.35);
   }
 }
+@media screen{
 :root[data-theme="dark"]{
   --bg:#0E1513; --surface:#151F1C; --surface-2:#1C2926; --ink:#E4EDEA; --ink-2:#A2B4AE; --ink-3:#72857F; --line:#293733;
   --accent:#3CBF92; --accent-2:#5FD3A9; --accent-soft:#16342A; --on-accent:#06231A;
@@ -62,6 +64,8 @@
   --weekend:#18231F; --duty:#211E33; --overlay:rgba(0,0,0,.6);
   --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.35);
 }
+}
+
 
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
@@ -416,7 +420,7 @@ fieldset legend{padding:0;margin-bottom:8px}
 .gate .btn{justify-content:center}
 .gate .err{margin:0;padding:9px 12px;border-radius:9px;background:var(--bad-bg);color:var(--bad);font-size:13.5px}
 .whoami{position:relative}
-:root[data-theme="dark"]{color-scheme:dark}:root[data-theme="light"]{color-scheme:light}
+@media screen{:root[data-theme="dark"]{color-scheme:dark}}:root[data-theme="light"]{color-scheme:light}
 #theme-area{display:flex;align-items:center;gap:8px;justify-self:end}
 .tbtn{width:38px;height:38px;border-radius:50%;border:2px solid var(--line);background:var(--surface);color:var(--ink-2);display:grid;place-items:center;padding:0;cursor:pointer}
 .tbtn:hover{border-color:var(--accent);color:var(--ink)}.tbtn svg{width:18px;height:18px}
@@ -446,8 +450,14 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media print{
+  /* Na folha sai só o logótipo com o nome da farmácia, a semana (com o plantão e as datas)
+     e a escala — sem a coluna dos totais nem a linha «ao balcão». */
   body{background:#fff}
-  .tabs,.actions,.weeknav .btn,.below,.status,.banner,.empty-week,.menu,.toast{display:none!important}
+  .tabs,.actions,.weeknav .btn,.below,.status,.banner,.empty-week,.menu,.toast,
+  .summary,.top-right,#brand-tagline,
+  .grid .tot,.grid tr.presrow{display:none!important}
+  .top{border:0;padding-bottom:0}
+  .toolbar{margin-bottom:8px}
   .grid-wrap{border:0;overflow:visible}
   table.grid{min-width:0}
   .cell{border:1px solid #bbb!important;box-shadow:none!important}
@@ -2055,7 +2065,7 @@ function renderSchedule() {
     presRow += `<td class="${d >= 5 ? 'we' : ''} ${d === duty ? 'duty' : ''}"><div class="pres" role="img" aria-label="Pessoas ao balcão entre ${fmtMin(p.from)} e ${fmtMin(p.to)}">${bars}</div><div class="pres-axis"><span>${fmtMin(p.from).slice(0, 2)}h</span><span>${fmtMin(p.to).slice(0, 2)}h</span></div></td>`;
   });
   const bandsTxt = (C.presenceBands || []).filter(b => validTime(b.from) && validTime(b.to)).map(b => `${b.from}–${b.to} ${+b.min || 0}`).join(', ');
-  foot += `<tr><th scope="row">Ao balcão<small>por ½ hora · mín. ${C.minPresent}${bandsTxt ? ` (${bandsTxt})` : ''}</small></th>${presRow}<td class="tot"></td></tr>`;
+  foot += `<tr class="presrow"><th scope="row">Ao balcão<small>por ½ hora · mín. ${C.minPresent}${bandsTxt ? ` (${bandsTxt})` : ''}</small></th>${presRow}<td class="tot"></td></tr>`;
 
   let backRow = '', backTotal = 0;
   for (let d = 0; d < 7; d++) {
@@ -2108,7 +2118,6 @@ function renderSchedule() {
     </div>
     <div class="actions">
       <button class="btn primary" data-action="generate" ${ro || !ids.length ? 'disabled' : ''}>Gerar escala</button>
-      <button class="btn" data-action="relunch" ${ro || !hasSched ? 'disabled' : ''}>Distribuir almoços</button>
       <button class="btn" data-action="copy-prev" ${ro || !ids.length ? 'disabled' : ''}>Copiar semana anterior</button>
       <button class="btn" data-action="clear" ${ro || !hasSched ? 'disabled' : ''}>Limpar semana</button>
       <button class="btn" data-action="print">Imprimir</button>
@@ -2127,7 +2136,7 @@ function renderSchedule() {
   </div>
   <div class="grid-wrap">
     <table class="grid">
-      <thead><tr><th scope="col" class="emp">Funcionário</th>${head}<th scope="col">Total</th></tr></thead>
+      <thead><tr><th scope="col" class="emp">Funcionário</th>${head}<th scope="col" class="tot">Total</th></tr></thead>
       <tbody>${body}</tbody>
       <tfoot>${foot}${contagens}</tfoot>
     </table>
@@ -2979,29 +2988,6 @@ function setBankOff(id, d, hours) {
   }
   writeCell(id, d, { bank: hours });
 }
-function redistributeLunches() {
-  const wk = state.week, ids = sortedIds();
-  const sched = clone(state.schedules[wk] || { cells: {} });
-  sched.cells = sched.cells || {};
-  for (let d = 0; d < 7; d++) {
-    const taken = [];
-    ids.map(id => ({ id, c: getCell(wk, id, d) })).filter(x => x.c?.lock && x.c.l).forEach(x => taken.push({ t: toMin(x.c.l), d: lunchLen(x.c) }));
-    ids.map(id => ({ id, c: getCell(wk, id, d) })).filter(x => x.c?.sh?.lunch && !x.c.lock)
-      .sort((a, b) => toMin(a.c.sh.start) - toMin(b.c.sh.start))
-      .forEach(({ id, c }) => {
-        const dur = lunchFitLen(c.sh, lunchLen(c));
-        const fixo = backLunchAt();
-        const l = c.post === 'back' && lunchOptions(c.sh, lunchMinLen()).includes(toMin(fixo)) ? fixo : pickLunch(c.sh, taken, dur);
-        const raw = { ...cellRaw(c), ...(l ? { l } : {}) };
-        if (c.post === 'back' || dur === lunchMinLen()) delete raw.ld; else raw.ld = dur;
-        sched.cells[id][d] = raw;
-        if (l) taken.push({ t: toMin(l), d: c.post === 'back' ? lunchMinLen() : dur });
-      });
-  }
-  sched.updatedAt = new Date().toISOString();
-  store.saveWeek(wk, sched);
-  render();
-}
 
 /* ---------- CSV ---------- */
 function downloadCSV() {
@@ -3282,7 +3268,6 @@ document.addEventListener('click', async ev => {
       store.saveWeek(state.week, { cells: generate(state.week, d), updatedAt: new Date().toISOString() });
       render(); toast(`Escala refeita a partir de ${DAYS_LONG[d].toLowerCase()}.`); break;
     }
-    case 'relunch': redistributeLunches(); toast('Almoços redistribuídos para não coincidirem.'); break;
     case 'copy-prev': {
       const prev = state.schedules[shiftWeek(state.week, -1)]?.cells;
       if (!prev || !Object.values(prev).some(c => Object.keys(c).length)) { toast('A semana anterior não tem turnos para copiar.'); break; }

@@ -209,7 +209,7 @@ exportação e importação em JSON.
   ficha, indicando o período. Dias de férias não recebem turnos na geração automática e
   descontam um dia ao mínimo dessa semana.
 - **Bloquear**: no menu da célula, «Bloquear» fixa o que lá está (turno, folga, férias…):
-  nada a altera — nem gerar, nivelar, distribuir almoços, copiar a semana anterior ou
+  nada a altera — nem gerar, nivelar, copiar a semana anterior ou
   limpar a semana, nem edições à mão — até ser desbloqueada. Aparece com 🔒.
 - **Balcão e backoffice**: só quem está marcado como **backoffice** na ficha trabalha
   nesse posto — quem é do balcão nunca lá vai (a secção *Posto* nem aparece no menu da
@@ -251,6 +251,13 @@ ao balcão em cada dia: nomes com a cor de cada pessoa, quem está a almoçar ne
 (riscado, ou 🍴 se o almoço apanha só parte da hora), quem está em backoffice (tracejado,
 não conta para o mínimo), a contagem face ao mínimo dessa hora e, na última linha, quem
 faz a noite de serviço no dia de plantão.
+
+## Imprimir
+
+O botão **Imprimir** do separador *Horário* manda para a folha apenas o essencial: o
+logótipo com o nome da farmácia, a linha da semana (número, dia de plantão e datas de
+início e fim) e a escala. Ficam de fora os botões, o resumo, a legenda, os alertas, as
+regras, a coluna dos totais e a linha «ao balcão».
 
 ## Horário da farmácia
 
