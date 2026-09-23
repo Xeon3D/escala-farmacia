@@ -967,7 +967,9 @@ function shiftOn(sh, d, wk = state.week) {
     const inicio = weekendNightStart();
     return d >= 5 && inicio !== sh.start ? { ...sh, start: inicio, weekendNight: true } : sh;
   }
-  if (sh.onlyDuty || sh.back) return withLunchRule(sh);
+  /* Turno «fora do horário» (ex.: sábado das 08:00 às 12:00 numa farmácia que abre às 09:00):
+     fica tal e qual, sem ser cortado pela abertura. */
+  if (sh.onlyDuty || sh.back || sh.noClip) return withLunchRule(sh);
   const o = openingOf(d, wk);
   if (o.closed) return withLunchRule(sh);
   const [a, b] = span(sh), [oa, ob] = openSpan(d, wk);
@@ -984,7 +986,7 @@ function shiftFits(sh, d, wk = state.week) {
   if (!sh) return false;
   if (sh.onlyDuty || sh.night) return true;
   if (openingOf(d, wk).closed) return false;
-  if (sh.back) return true;
+  if (sh.back || sh.noClip) return true;
   const [a, b] = span(sh), [oa, ob] = openSpan(d, wk);
   return Math.min(b, ob) > Math.max(a, oa);
 }
@@ -1474,7 +1476,7 @@ function cellIssues(e, id, wk, d, cell, lookup = getCell, both = false) {
   if (e.extra) out.push({ lvl: 'info', msg: 'Pessoa extra com um turno completo — podes antes indicar só as horas que fez' });
   if (cell.pay === 'bank' && d !== dutyDay(wk)) out.push({ lvl: 'warn', msg: 'Só as horas do dia de plantão podem ir para o banco' });
   if (!sh.onlyDuty && !sh.night && isClosed(d, wk)) out.push({ lvl: 'bad', msg: 'A farmácia está fechada neste dia — só há o turno de plantão' });
-  else if (!shiftFits(sh, d, wk)) out.push({ lvl: 'bad', msg: `Turno fora do horário de abertura (${openingOf(d, wk).open}–${openingOf(d, wk).close})` });
+  else if (!sh.noClip && !shiftFits(sh, d, wk)) out.push({ lvl: 'bad', msg: `Turno fora do horário de abertura (${openingOf(d, wk).open}–${openingOf(d, wk).close})` });
   else if (sh.clipped) out.push({ lvl: 'info', msg: `Termina às ${sh.end}: a farmácia fecha a essa hora` });
   if (cell.post === 'back' && sh.night) out.push({ lvl: 'warn', msg: 'A noite de serviço não é trabalho de backoffice' });
   if (sh.night && !e.acceptsNight) out.push({ lvl: 'bad', msg: 'Não faz turnos noturnos' });
@@ -1644,7 +1646,8 @@ function generate(wk, fromDay = 0) {
   const nightsBefore = id => before(id, c => c?.sh?.night);
   const saturdaysBefore = id => before(id, (c, d) => d >= 5 && worksOn(c) && !c.sh?.night);
   const target = id => weeklyTarget(state.employees[id]);
-  const dayShifts = sortedShifts().filter(sh => !sh.night && !sh.onlyDuty && !sh.back);
+  /* Turnos «fora do horário» são sempre marcados à mão (ou como turno fixo): a geração não os usa. */
+  const dayShifts = sortedShifts().filter(sh => !sh.night && !sh.onlyDuty && !sh.back && !sh.noClip);
   const backShifts = sortedShifts().filter(sh => sh.back);
   /* Quem é de backoffice faz sempre o horário de backoffice, se houver um definido. */
   const shiftsFor = id => (state.employees[id].backoffice && backShifts.length ? backShifts : dayShifts);
@@ -2459,7 +2462,7 @@ function refreshCfgBits() {
 function openingCoverage(c, o, d) {
   if (!validTime(o.open) || !validTime(o.close)) return '—';
   const a = toMin(o.open); let b = toMin(o.close); if (b <= a) b += 1440;
-  const day = c.shifts.filter(s => !s.night && !s.onlyDuty && validTime(s.start) && validTime(s.end));
+  const day = c.shifts.filter(s => !s.night && !s.onlyDuty && !s.noClip && validTime(s.start) && validTime(s.end));
   if (!day.length) return 'sem turnos de dia';
   const from = Math.min(...day.map(s => span(s)[0])), to = Math.max(...day.map(s => span(s)[1]));
   const gaps = [];
@@ -2488,6 +2491,7 @@ function renderSettings() {
       <td class="c"><input type="checkbox" id="cfg-${i}-night" data-cfg="shift" data-i="${i}" data-k="night" ${s.night ? 'checked' : ''} aria-label="Turno noturno" ${ro}></td>
       <td class="c"><input type="checkbox" id="cfg-${i}-onlyDuty" data-cfg="shift" data-i="${i}" data-k="onlyDuty" ${s.onlyDuty ? 'checked' : ''} aria-label="Só no dia de plantão" ${ro}></td>
       <td class="c"><input type="checkbox" id="cfg-${i}-back" data-cfg="shift" data-i="${i}" data-k="back" ${s.back ? 'checked' : ''} aria-label="Horário de backoffice" title="Horário fixo de backoffice: não é usado ao balcão nem cortado ao horário de abertura" ${ro}></td>
+      <td class="c"><input type="checkbox" id="cfg-${i}-noClip" data-cfg="shift" data-i="${i}" data-k="noClip" ${s.noClip ? 'checked' : ''} aria-label="Fora do horário de abertura" title="O turno não é cortado pelo horário de abertura (ex.: sábado 08:00–12:00). A geração automática não o usa: atribui-se à mão ou como turno fixo." ${ro}></td>
       <td class="hrs" id="cfg-hrs-${i}">${validTime(s.start) && validTime(s.end) ? shiftHoursLabel(s, c) : '—'}</td>
       <td><button class="btn danger icon" data-action="cfg-remove" data-i="${i}" aria-label="Remover turno ${esc(s.name)}" ${ro}>✕</button></td>
     </tr>`).join('');
@@ -2519,9 +2523,9 @@ function renderSettings() {
   </div>
   <section class="panel">
     <h3>Turnos</h3>
-    <p>Horário de cada turno. Não há quotas por turno: de segunda a sexta a geração distribui a equipa pelos turnos para manter um número parecido de pessoas ao balcão ao longo do dia; ao sábado escala só as pessoas indicadas abaixo; ao domingo só trabalha o plantão, quando calha nesse dia. «Só no plantão» reserva o turno para o dia de plantão. «Backoffice» marca um horário fixo de backoffice (ex.: 09:00–17:30): nunca é usado ao balcão, não é cortado ao horário de abertura e quem o faz entra logo em backoffice — atribui-o como turno fixo na ficha de quem é de backoffice. As horas mostram o tempo que conta como trabalhado e o que são horas nocturnas, pagas à parte.</p>
+    <p>Horário de cada turno. Não há quotas por turno: de segunda a sexta a geração distribui a equipa pelos turnos para manter um número parecido de pessoas ao balcão ao longo do dia; ao sábado escala só as pessoas indicadas abaixo; ao domingo só trabalha o plantão, quando calha nesse dia. «Só no plantão» reserva o turno para o dia de plantão. «Backoffice» marca um horário fixo de backoffice (ex.: 09:00–17:30): nunca é usado ao balcão, não é cortado ao horário de abertura e quem o faz entra logo em backoffice — atribui-o como turno fixo na ficha de quem é de backoffice. «Fora do horário» deixa o turno correr para lá da abertura da farmácia (ex.: sábado das 08:00 às 12:00 numa farmácia que abre às 09:00): não é cortado nem dá conflito, e a geração automática não o usa — marca-o à mão na célula ou como turno fixo na ficha. As horas mostram o tempo que conta como trabalhado e o que são horas nocturnas, pagas à parte.</p>
     <div class="cfg-wrap"><table class="cfg">
-      <thead><tr><th>Nome</th><th>Abrev.</th><th>Início</th><th>Fim</th><th class="c">Almoço</th><th class="c">Noturno</th><th class="c">Só no plantão</th><th class="c">Backoffice</th><th>Horas</th><th></th></tr></thead>
+      <thead><tr><th>Nome</th><th>Abrev.</th><th>Início</th><th>Fim</th><th class="c">Almoço</th><th class="c">Noturno</th><th class="c">Só no plantão</th><th class="c">Backoffice</th><th class="c">Fora do horário</th><th>Horas</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
     <div style="margin-top:12px"><button class="btn" data-action="cfg-add" ${ro}>Adicionar turno</button></div>

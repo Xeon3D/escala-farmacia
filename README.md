@@ -291,6 +291,11 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
 
 - **Turnos**: entradas às 9h, 10h e 11h (8 h de trabalho + 1 h de almoço) e noite de
   serviço das 19:00 às 07:00. Tudo editável no separador *Turnos*.
+- **Turnos fora do horário**: um turno marcado com **Fora do horário** no separador
+  *Turnos* não é cortado pela hora de abertura — serve para trabalho antes de abrir ou
+  depois de fechar (por exemplo, sábado das 08:00 às 12:00 numa farmácia que abre às
+  09:00). Não dá conflito e a geração automática não o usa: marca-se à mão na célula ou
+  como turno fixo na ficha.
 - **Almoço**: duração entre um mínimo e um máximo (1 h a 2 h por omissão), a começar
   dentro do intervalo definido (12:00–16:00) e desencontrado entre colegas. A duração de
   cada dia escolhe-se no menu da célula; a geração usa almoços mais longos para acertar as
