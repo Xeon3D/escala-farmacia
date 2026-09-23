@@ -295,7 +295,10 @@ abertura e de fecho, ou marcas o dia como **fechado** (o encerramento semanal). 
   *Turnos* não é cortado pela hora de abertura — serve para trabalho antes de abrir ou
   depois de fechar (por exemplo, sábado das 08:00 às 12:00 numa farmácia que abre às
   09:00). Não dá conflito e a geração automática não o usa: marca-se à mão na célula ou
-  como turno fixo na ficha.
+  como turno fixo na ficha. A marca **Sem nocturnas** (na mesma tabela) faz esse turno
+  contar tudo como horas normais, mesmo apanhando o intervalo das horas nocturnas — útil
+  para uma manhã de sábado das 08:00 às 12:00 sem mexer no intervalo geral, que a noite de
+  serviço precisa de manter.
 - **Almoço**: duração entre um mínimo e um máximo (1 h a 2 h por omissão), a começar
   dentro do intervalo definido (12:00–16:00) e desencontrado entre colegas. A duração de
   cada dia escolhe-se no menu da célula; a geração usa almoços mais longos para acertar as

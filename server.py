@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS shifts (
   saturday  INTEGER,
   back      INTEGER NOT NULL DEFAULT 0,
   no_clip   INTEGER NOT NULL DEFAULT 0,
+  no_double INTEGER NOT NULL DEFAULT 0,
   position  INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS assignments (
@@ -217,7 +218,8 @@ def migrate() -> None:
                         "c_from": "TEXT NOT NULL DEFAULT ''", "c_to": "TEXT NOT NULL DEFAULT ''"},
         "users": {"avatar": "TEXT NOT NULL DEFAULT ''"},
         "shifts": {"saturday": "INTEGER", "back": "INTEGER NOT NULL DEFAULT 0",
-                   "no_clip": "INTEGER NOT NULL DEFAULT 0"},
+                   "no_clip": "INTEGER NOT NULL DEFAULT 0",
+                   "no_double": "INTEGER NOT NULL DEFAULT 0"},
     }
     with lock:
         for table, columns in additions.items():
@@ -259,11 +261,11 @@ def init_data() -> None:
         if not conn.execute("SELECT 1 FROM shifts LIMIT 1").fetchone():
             for i, s in enumerate(DEFAULT_SHIFTS):
                 conn.execute(
-                    "INSERT INTO shifts (id,name,short,start,end,lunch,night,only_duty,weekday,weekend,saturday,back,no_clip,position)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO shifts (id,name,short,start,end,lunch,night,only_duty,weekday,weekend,saturday,back,no_clip,no_double,position)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (s["id"], s["name"], s["short"], s["start"], s["end"], int(s["lunch"]),
                      int(s["night"]), int(s["onlyDuty"]), s["weekday"], s["weekend"], s["saturday"],
-                     int(s.get("back", False)), int(s.get("noClip", False)), i),
+                     int(s.get("back", False)), int(s.get("noClip", False)), int(s.get("noDouble", False)), i),
                 )
         for k, v in DEFAULT_SETTINGS.items():
             conn.execute("INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)", (k, json.dumps(v)))
@@ -770,7 +772,7 @@ def read_state() -> dict:
             {
                 "id": r["id"], "name": r["name"], "short": r["short"], "start": r["start"], "end": r["end"],
                 "lunch": bool(r["lunch"]), "night": bool(r["night"]), "onlyDuty": bool(r["only_duty"]), "back": bool(r["back"]),
-                "noClip": bool(r["no_clip"]),
+                "noClip": bool(r["no_clip"]), "noDouble": bool(r["no_double"]),
                 "weekday": r["weekday"], "weekend": r["weekend"], "saturday": r["saturday"],
             }
             for r in conn.execute("SELECT * FROM shifts ORDER BY position, start")
@@ -923,14 +925,14 @@ def save_config(cfg: dict) -> None:
             if not ID_RE.match(sid):
                 continue
             conn.execute(
-                "INSERT OR REPLACE INTO shifts (id,name,short,start,end,lunch,night,only_duty,weekday,weekend,saturday,back,no_clip,position)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT OR REPLACE INTO shifts (id,name,short,start,end,lunch,night,only_duty,weekday,weekend,saturday,back,no_clip,no_double,position)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (sid, str(s.get("name", ""))[:60], str(s.get("short", ""))[:8],
                  str(s.get("start", "09:00"))[:5], str(s.get("end", "18:00"))[:5],
                  int(bool(s.get("lunch"))), int(bool(s.get("night"))), int(bool(s.get("onlyDuty"))),
                  max(0, int(s.get("weekday") or 0)), max(0, int(s.get("weekend") or 0)),
                  None if s.get("saturday") in (None, "") else max(0, int(s.get("saturday") or 0)),
-                 int(bool(s.get("back"))), int(bool(s.get("noClip"))), i),
+                 int(bool(s.get("back"))), int(bool(s.get("noClip"))), int(bool(s.get("noDouble"))), i),
             )
         for k in DEFAULT_SETTINGS:
             if k not in cfg:
