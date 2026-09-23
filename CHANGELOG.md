@@ -4,6 +4,10 @@ Cada versão tem um cabeçalho `## versão — data` e uma lista de pontos. A ap
 aos administradores as entradas mais recentes do que a versão instalada quando procura
 atualizações.
 
+## 1.6.11 — 2026-09-23
+- Um dia encurtado pelo ajuste de horas para 4 h ou menos passa a ser feito sem almoço.
+- Menu da célula mais largo e fixo no sítio: ao carregar no − ou no + já não foge debaixo do rato.
+
 ## 1.6.10 — 2026-09-23
 - Horários de 4 h ou menos deixam de ter almoço, na escala e na contagem de horas.
 
