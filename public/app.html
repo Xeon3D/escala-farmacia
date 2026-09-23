@@ -1281,6 +1281,8 @@ function cellHours(c) {
   if (c.sh) {
     if (!c.less) return hoursOf(c.sh, c.l, lunchLen(c));
     const [s, e] = cellSpan(c), dur = cellLunch(c);
+    /* Tirou-se o dia inteiro: sem horário não há horas nenhumas (nem nocturnas). */
+    if (e <= s) return { work: 0, dbl: 0, normal: 0, pay: 0, less: Math.max(0, +c.less || 0), adj: +c.less || 0 };
     const h = hoursOf({ ...c.sh, start: fmtMin(s), end: fmtMin(e % 1440), lunch: dur > 0 }, dur ? c.l : '', dur);
     return { ...h, less: Math.max(0, +c.less || 0), adj: +c.less || 0 };
   }
@@ -1997,8 +1999,9 @@ function renderSchedule() {
         tone = toneOf(c.sh) + (isBackoffice(c) ? ' back' : '');
         /* Em cima as horas trabalhadas nesse dia; por baixo o horário mesmo feito (com o ajuste) e o almoço. */
         const h = cellHours(c), ef = cellShift(c);
-        inner = `<b>${fmtH(h.normal)} h</b><span>${ef.start}–${ef.end}</span>` +
-          (c.sh.lunch ? `<span class="lu">${cellLunch(c) ? 'alm. ' + c.l + (cellLunch(c) !== lunchMinLen() ? ` (${fmtDur(cellLunch(c))})` : '') : 'sem almoço'}</span>` : h.dbl ? `<span class="lu">+ ${fmtH(h.dbl)} h nocturnas</span>` : '');
+        const vazio = ef.start === ef.end;   /* tirou-se o dia todo com o ajuste */
+        inner = `<b>${fmtH(h.normal)} h</b><span>${vazio ? 'sem horário' : `${ef.start}–${ef.end}`}</span>` +
+          (vazio ? '' : c.sh.lunch ? `<span class="lu">${cellLunch(c) ? 'alm. ' + c.l + (cellLunch(c) !== lunchMinLen() ? ` (${fmtDur(cellLunch(c))})` : '') : 'sem almoço'}</span>` : h.dbl ? `<span class="lu">+ ${fmtH(h.dbl)} h nocturnas</span>` : '');
       } else if (c?.vac) {
         tone = 'tone-vac';
         inner = '<b>Férias</b>';
@@ -2828,7 +2831,7 @@ function openMenu(btn, keep) {
     const [es, ee] = cellSpan(cur), hh = cellHours(cur), adj = +cur.less || 0;
     /* Ajuste em passos de meia hora: − 00:00 + (positivo = horas a mais, negativo = a menos). */
     const val = -adj, sinal = val > 0 ? '+' : val < 0 ? '−' : '';
-    lessPick = `<div class="lunch-pick"><p>Ajuste do dia · faz ${fmtMin(es)}–${fmtMin(ee % 1440)} (${fmtH(hh.normal)} h)${adj ? ` · ${sinal}${fmtH(Math.abs(val))} h no banco` : ''}</p><div style="align-items:center">
+    lessPick = `<div class="lunch-pick"><p>Ajuste do dia · ${es === ee ? 'não faz horas' : `faz ${fmtMin(es)}–${fmtMin(ee % 1440)} (${fmtH(hh.normal)} h)`}${adj ? ` · ${sinal}${fmtH(Math.abs(val))} h no banco` : ''}</p><div style="align-items:center">
       <span class="stepper">
         <button data-action="adj" data-id="${esc(id)}" data-d="${d}" data-v="0.5" title="Meia hora a menos" aria-label="Meia hora a menos">−</button>
         <b class="${val > 0 ? 'pos' : val < 0 ? 'neg' : ''}">${sinal}${pad(Math.floor(Math.abs(val)))}:${pad(Math.round((Math.abs(val) % 1) * 60))}</b>
