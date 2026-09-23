@@ -252,6 +252,13 @@ ao balcão em cada dia: nomes com a cor de cada pessoa, quem está a almoçar ne
 não conta para o mínimo), a contagem face ao mínimo dessa hora e, na última linha, quem
 faz a noite de serviço no dia de plantão.
 
+## Datas e horas
+
+Os campos de data são escritos em **dia/mês/ano** (`24/12/2026`; também aceitam `24-12-2026`,
+`24122026` e `2026-12-24`) e têm ao lado um calendário em português, com as semanas de segunda
+a domingo. Não se usa o campo de data do navegador, que aparecia em inglês e no formato
+americano. As horas seguem o mesmo princípio: sempre `HH:MM` em 24 horas.
+
 ## Imprimir
 
 O botão **Imprimir** do separador *Horário* manda para a folha apenas o essencial: o

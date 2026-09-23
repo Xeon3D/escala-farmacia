@@ -334,6 +334,18 @@ input.timein.bad{border-color:var(--bad);background:var(--bad-bg)}
 .dirty-note{font-size:13px;color:var(--warn)}
 .data-io textarea{width:100%;min-height:120px;border:1px solid var(--line);border-radius:9px;background:var(--bg);padding:10px;font:12px var(--mono);resize:vertical}
 
+.datefield{display:flex;gap:6px;align-items:center}
+.datefield input{flex:1;min-width:0}
+.menu.cal{position:fixed;width:268px;padding:10px;z-index:80;max-height:none;overflow:visible}
+.cal .calhead{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px}
+.cal .calhead b{font:600 13px var(--sans)}
+.cal .cal7{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal .cal7 span{font:10px var(--mono);color:var(--ink-3);text-align:center;padding:2px 0}
+.cal .cal7 button{border:1px solid transparent;background:transparent;border-radius:7px;padding:6px 0;font:12px var(--mono);color:var(--ink);cursor:pointer}
+.cal .cal7 button:hover{background:var(--surface-2)}
+.cal .cal7 button.out{color:var(--ink-3);opacity:.55}
+.cal .cal7 button.hoje{border-color:var(--accent)}
+.cal .cal7 button.cur{background:var(--accent);color:var(--on-accent)}
 .menu{position:absolute;z-index:40;width:405px;max-width:calc(100vw - 32px);background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px;max-height:80vh;overflow:auto}
 .menu-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;font-size:12px;color:var(--ink-3);padding:5px 6px 7px;border-bottom:1px solid var(--line);margin-bottom:3px}
 .menu-head b{color:var(--ink);font-size:13px}
@@ -493,6 +505,7 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
 </div>
 
 <div class="menu" id="menu" role="menu" hidden></div>
+<div class="menu cal" id="cal" hidden></div>
 
 <dialog id="editor">
   <form class="dlg" id="editor-form" method="dialog">
@@ -597,8 +610,8 @@ table.users{border-collapse:separate;border-spacing:0;width:100%;min-width:720px
     <div class="body">
       <p style="margin:0;color:var(--ink-2);font-size:14px">Marca férias ou baixa médica de uma só vez. Esses dias não contam para o mínimo semanal e a geração automática não atribui turnos nesses dias.</p>
       <div class="row2">
-        <div class="field"><label for="vac-from">De</label><input type="date" id="vac-from" required></div>
-        <div class="field"><label for="vac-to">Até</label><input type="date" id="vac-to" required></div>
+        <div class="field"><label for="vac-from">De</label><span class="datefield"><input type="text" class="timein" id="vac-from" data-date="1" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA" autocomplete="off" spellcheck="false" aria-label="De (dia/mês/ano)" required><button type="button" class="btn icon" data-action="cal" data-for="vac-from" title="Escolher no calendário" aria-label="Escolher a data inicial no calendário">📅</button></span></div>
+        <div class="field"><label for="vac-to">Até</label><span class="datefield"><input type="text" class="timein" id="vac-to" data-date="1" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA" autocomplete="off" spellcheck="false" aria-label="Até (dia/mês/ano)" required><button type="button" class="btn icon" data-action="cal" data-for="vac-to" title="Escolher no calendário" aria-label="Escolher a data final no calendário">📅</button></span></div>
       </div>
       <div class="field"><label for="vac-mode">O que fazer</label>
         <select id="vac-mode">
@@ -753,6 +766,26 @@ function timeInput(id, value, label, attrs, ro) {
   return `<input type="text" class="timein" id="${id}" value="${esc(value || '')}" ${attrs} data-time="1"
     inputmode="numeric" maxlength="5" placeholder="00:00" autocomplete="off" spellcheck="false"
     aria-label="${esc(label)} (formato 24 horas, HH:MM)" title="Formato de 24 horas, entre 00:00 e 23:59" ${ro}>`;
+}
+/* ---------- Datas em português: dia/mês/ano, sem depender da região do navegador ---------- */
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const isoToPt = s => (/^\d{4}-\d{2}-\d{2}$/.test(s || '') ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : '');
+/** Aceita 24/12/2026, 24-12-2026, 24122026 e também 2026-12-24. Devolve ano-mês-dia ou ''. */
+function ptToIso(v) {
+  const s = String(v || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})[\/\-. ](\d{1,2})[\/\-. ](\d{4})$/) || s.match(/^(\d{2})(\d{2})(\d{4})$/);
+  if (!m) return '';
+  const dd = +m[1], mm = +m[2], aa = +m[3], dt = new Date(aa, mm - 1, dd);
+  if (dt.getFullYear() !== aa || dt.getMonth() !== mm - 1 || dt.getDate() !== dd) return '';
+  return `${aa}-${pad(mm)}-${pad(dd)}`;
+}
+/** Campo de data em dia/mês/ano, com um calendário em português ao lado. */
+function dateInput(id, value, label, attrs = '', ro = '') {
+  return `<span class="datefield"><input type="text" class="timein" id="${id}" value="${esc(isoToPt(value))}" ${attrs} data-date="1"
+    inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA" autocomplete="off" spellcheck="false"
+    aria-label="${esc(label)} (dia/mês/ano)" title="Data em dia/mês/ano" ${ro}>
+    <button type="button" class="btn icon" data-action="cal" data-for="${id}" title="Escolher no calendário" aria-label="Escolher ${esc(label)} no calendário" ${ro}>📅</button></span>`;
 }
 function span(sh) { const s = toMin(sh.start); let e = toMin(sh.end); if (e <= s) e += 1440; return [s, e]; }
 
@@ -2502,7 +2535,7 @@ function renderSettings() {
     <h3>Plantão</h3>
     <p>Há um dia de plantão por semana e ele recua um dia a cada semana que passa. Indica o dia de uma semana de referência e o resto é calculado a partir daí — esta semana calha a ${DAYS_LONG[thisWeekDuty].toLowerCase()}.</p>
     <div class="rules-form">
-      <div class="field-inline"><label for="cfg-dutyAnchorWeek">Semana de referência</label><input type="date" id="cfg-dutyAnchorWeek" data-cfg="rule" data-k="dutyAnchorWeek" value="${esc(c.dutyAnchorWeek)}" ${ro}><small>Segunda-feira dessa semana · ${esc(c.dutyAnchorWeek)} (ano-mês-dia)</small></div>
+      <div class="field-inline"><label for="cfg-dutyAnchorWeek">Semana de referência</label>${dateInput('cfg-dutyAnchorWeek', c.dutyAnchorWeek, 'Semana de referência', 'data-cfg="rule" data-k="dutyAnchorWeek"', ro)}<small>Segunda-feira dessa semana · ${esc(c.dutyAnchorWeek)} (ano-mês-dia)</small></div>
       <div class="field-inline"><label for="cfg-dutyAnchorDay">Dia de plantão nessa semana</label><select id="cfg-dutyAnchorDay" data-cfg="rule" data-k="dutyAnchorDay" ${ro}>${DAYS_LONG.map((d, i) => `<option value="${i}" ${+c.dutyAnchorDay === i ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
       <div class="field-inline"><label for="cfg-dutyStep">Dias que recua por semana</label><input type="number" id="cfg-dutyStep" data-cfg="rule" data-k="dutyStep" value="${+c.dutyStep || 0}" min="-6" max="6" ${ro}><small>1 = recua um dia; −1 avança</small></div>
     </div>
@@ -2688,6 +2721,44 @@ async function waitForServer(maxMs = 60000) {
 
 /* ---------- Menu de turno ---------- */
 const menu = $('#menu');
+const cal = $('#cal');
+let calCtx = null;
+/** Calendário em português (semana de segunda a domingo) para os campos de data. */
+function drawCal() {
+  if (!calCtx) return;
+  const [ano, mes] = calCtx.mes.split('-').map(Number);
+  const primeiro = new Date(ano, mes - 1, 1);
+  const inicio = addDays(primeiro, -(((primeiro.getDay() + 6) % 7)));   // segunda-feira anterior
+  const escolhido = ptToIso(calCtx.input.value), hoje = iso(new Date());
+  let dias = '';
+  for (let i = 0; i < 42; i++) {
+    const dt = addDays(inicio, i), v = iso(dt);
+    dias += `<button type="button" data-action="cal-day" data-v="${v}" class="${dt.getMonth() !== mes - 1 ? 'out' : ''} ${v === hoje ? 'hoje' : ''} ${v === escolhido ? 'cur' : ''}" title="${DAYS_LONG[(dt.getDay() + 6) % 7]}, ${dt.getDate()} de ${MESES[dt.getMonth()]} de ${dt.getFullYear()}">${dt.getDate()}</button>`;
+  }
+  cal.innerHTML = `<div class="calhead">
+      <button type="button" class="btn icon" data-action="cal-move" data-n="-1" aria-label="Mês anterior">‹</button>
+      <b>${MESES[mes - 1]} ${ano}</b>
+      <button type="button" class="btn icon" data-action="cal-move" data-n="1" aria-label="Mês seguinte">›</button>
+    </div>
+    <div class="cal7">${DAYS.map(d => `<span>${d}</span>`).join('')}${dias}</div>`;
+}
+function openCal(btn) {
+  const alvo = document.getElementById(btn.dataset.for);
+  if (!alvo) return;
+  const base = ptToIso(alvo.value) || iso(new Date());
+  calCtx = { input: alvo, mes: base.slice(0, 7) };
+  /* Dentro de uma janela modal só se clica no que está lá dentro: o calendário vai com ela. */
+  (alvo.closest('dialog') || document.body).appendChild(cal);
+  drawCal();
+  cal.hidden = false;
+  const r = btn.getBoundingClientRect();
+  const left = Math.max(8, Math.min(r.left, window.innerWidth - cal.offsetWidth - 8));
+  let top = r.bottom + 6;
+  if (top + cal.offsetHeight > window.innerHeight - 8 && r.top - cal.offsetHeight - 6 > 8) top = r.top - cal.offsetHeight - 6;
+  cal.style.left = left + 'px';
+  cal.style.top = top + 'px';
+}
+function closeCal() { cal.hidden = true; calCtx = null; }
 let menuCtx = null;
 function openMenu(btn, keep) {
   const id = btn.dataset.id, d = +btn.dataset.d, e = state.employees[id], wk = state.week;
@@ -3138,11 +3209,31 @@ document.addEventListener('click', async ev => {
   }
   const el = ev.target.closest('[data-action]');
   if (state.userMenuOpen && !ev.target.closest('.whoami')) { state.userMenuOpen = false; if (state.user) $('#whoami').innerHTML = userMenuHTML(); }
+  if (!cal.hidden && !ev.target.closest('#cal') && !ev.target.closest('[data-action="cal"]')) closeCal();
   if (!el) { if (!ev.target.closest('#menu')) closeMenu(); return; }
   const a = el.dataset.action;
   if (['my-avatar', 'my-password', 'logout'].includes(a)) state.userMenuOpen = false;
   if (!['cell', 'pick', 'lunch', 'duty-pay', 'bank-off', 'post', 'vacation', 'sick', 'xoff', 'lock', 'less', 'adj', 'extra-hours', 'lunch-len', 'bc-clear'].includes(a)) closeMenu();
   switch (a) {
+    case 'cal': if (calCtx && calCtx.input.id === el.dataset.for) closeCal(); else openCal(el); break;
+    case 'cal-move': {
+      if (!calCtx) break;
+      const [ano, mes] = calCtx.mes.split('-').map(Number);
+      const dt = new Date(ano, mes - 1 + (+el.dataset.n), 1);
+      calCtx.mes = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}`;
+      drawCal(); break;
+    }
+    case 'cal-day': {
+      if (!calCtx) break;
+      const alvo = calCtx.input;
+      alvo.value = isoToPt(el.dataset.v);
+      alvo.classList.remove('bad');
+      closeCal();
+      alvo.dispatchEvent(new Event('input', { bubbles: true }));
+      alvo.dispatchEvent(new Event('change', { bubbles: true }));
+      alvo.focus();
+      break;
+    }
     case 'tab': state.tab = el.dataset.tab; ls.set('escala.tab', state.tab); render(); window.scrollTo(0, 0); break;
     case 'logout':
       await fetch('api/logout', { method: 'POST' }).catch(() => {});
@@ -3487,8 +3578,13 @@ document.addEventListener('submit', async ev => {
     }
   } else if (form.id === 'vac-form') {
     ev.preventDefault();
-    const mode = $('#vac-mode').value, from = $('#vac-from').value, to = $('#vac-to').value, on = mode === 'sick' ? 'sick' : mode === 'on';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) {
+    const mode = $('#vac-mode').value, on = mode === 'sick' ? 'sick' : mode === 'on';
+    const from = ptToIso($('#vac-from').value), to = ptToIso($('#vac-to').value);
+    if (!from || !to) {
+      $('#vac-warn').innerHTML = '<div class="form-warn">Escreve as datas em dia/mês/ano (por exemplo 24/12/2026) ou escolhe-as no calendário.</div>';
+      return;
+    }
+    if (to < from) {
       $('#vac-warn').innerHTML = '<div class="form-warn">Indica um período válido: a data final não pode ser anterior à inicial.</div>';
       return;
     }
@@ -3543,8 +3639,8 @@ function openVacation(id) {
   vacId = id;
   const e = state.employees[id];
   $('#vac-title').textContent = `Férias e baixas de ${e.name}`;
-  $('#vac-from').value = state.week;
-  $('#vac-to').value = iso(addDays(parseISO(state.week), 6));
+  $('#vac-from').value = isoToPt(state.week);
+  $('#vac-to').value = isoToPt(iso(addDays(parseISO(state.week), 6)));
   $('#vac-mode').value = 'on';
   $('#vac-warn').innerHTML = '';
   $('#vacdlg').showModal();
@@ -3607,11 +3703,24 @@ document.addEventListener('keydown', ev => {
     opts[(i + (ev.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length].focus();
   }
 });
-window.addEventListener('resize', () => closeMenu());
+window.addEventListener('resize', () => { closeMenu(); closeCal(); });
+/* Campos de data: marcam-se a vermelho enquanto a data não for válida e arrumam-se ao sair. */
+document.addEventListener('input', ev => {
+  const t = ev.target;
+  if (t?.dataset?.date) t.classList.toggle('bad', !!t.value.trim() && !ptToIso(t.value));
+});
+document.addEventListener('blur', ev => {
+  const t = ev.target;
+  if (!t?.dataset?.date) return;
+  const limpo = ptToIso(t.value);
+  if (limpo) { t.value = isoToPt(limpo); t.classList.remove('bad'); }
+  else if (t.value.trim()) t.classList.add('bad');
+}, true);
 
 function applyCfgInput(t) {
   const c = draft(), k = t.dataset.k;
-  const val = t.type === 'checkbox' ? t.checked : t.type === 'number' ? (t.value === '' ? '' : +t.value) : t.value;
+  const val = t.type === 'checkbox' ? t.checked : t.type === 'number' ? (t.value === '' ? '' : +t.value)
+    : t.dataset.date ? (ptToIso(t.value) || c[k] || '') : t.value;
   if (t.dataset.cfg === 'shift') c.shifts[+t.dataset.i][k] = val;
   else if (t.dataset.cfg === 'band') { (c.presenceBands = c.presenceBands || [])[+t.dataset.i][k] = val; }
   else if (t.dataset.cfg === 'open') {
@@ -3634,6 +3743,7 @@ document.addEventListener('input', ev => {
     const disc = document.querySelector('[data-action="pref-discard"]'); if (disc) disc.disabled = false;
   } else if (t.dataset?.cfg && t.type !== 'checkbox' && t.tagName !== 'SELECT') {
     if (t.dataset.time) t.classList.toggle('bad', !!t.value.trim() && !normalizeTime(t.value));
+    if (t.dataset.date) t.classList.toggle('bad', !!t.value.trim() && !ptToIso(t.value));
     applyCfgInput(t);
     const save = document.querySelector('[data-action="cfg-save"]'); if (save && !state.readOnly) save.disabled = false;
     const disc = document.querySelector('[data-action="cfg-discard"]'); if (disc) disc.disabled = false;
