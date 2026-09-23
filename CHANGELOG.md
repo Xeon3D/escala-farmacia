@@ -4,6 +4,9 @@ Cada versão tem um cabeçalho `## versão — data` e uma lista de pontos. A ap
 aos administradores as entradas mais recentes do que a versão instalada quando procura
 atualizações.
 
+## 1.6.13 — 2026-09-23
+- A geração deixa de sair sempre igual: os turnos rodam entre quem trabalha no mesmo dia, sem mexer no número de pessoas ao balcão nem nas horas de cada um.
+
 ## 1.6.12 — 2026-09-23
 - Turnos podem ficar fora do horário de abertura (ex.: sábado 08:00–12:00) e contar sem horas nocturnas.
 - Limpar semana deixa de apagar férias e baixas médicas.
