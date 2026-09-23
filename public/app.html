@@ -1642,6 +1642,7 @@ function generate(wk, fromDay = 0) {
     if ((state.employees[id].backoffice || sh.back) && !sh.night) cells[id][d].post = 'back';
     if (sh.night) nights[id]++;
   };
+  const baralhar = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   /* Noites e sábados feitos nas últimas semanas, para rodar pela equipa. */
   const before = (id, test) => { let n = 0; for (let k = 1; k <= 6; k++) for (let d = 0; d < 7; d++) if (test(getCell(shiftWeek(wk, -k), id, d), d)) n++; return n; };
   const nightsBefore = id => before(id, c => c?.sh?.night);
@@ -1772,9 +1773,9 @@ function generate(wk, fromDay = 0) {
     let cur = cost();
     for (let round = 0; round < 12; round++) {
       let improved = false;
-      for (const id of workers) {
+      for (const id of baralhar(workers.slice())) {
         let best = { sid: cells[id][d].s, cost: cur };
-        for (const sh of dayShifts) {
+        for (const sh of baralhar(dayShifts.slice())) {
           if (sh.id === cells[id][d].s || !shiftFits(sh, d, wk)) continue;
           const prev = cells[id][d].s; cells[id][d].s = sh.id;
           const ok = hardOk(id, d, sh.id, cellsLookup);
@@ -1789,6 +1790,51 @@ function generate(wk, fromDay = 0) {
         }
       }
       if (!improved) break;
+    }
+  }
+  /* 6b. Rodar os turnos entre quem trabalha no mesmo dia: trocar turnos entre pessoas não mexe
+         no número de gente ao balcão a cada meia hora, mas evita que seja sempre a mesma pessoa
+         a abrir ou a fechar. Só se trocam turnos com as mesmas horas, para ninguém ganhar ou
+         perder horas na semana. */
+  const turnosAntes = (id, sid) => {
+    let n = 0;
+    for (let k = 1; k <= 4; k++) for (let x = 0; x < 7; x++) if (getCell(shiftWeek(wk, -k), id, x)?.s === sid) n++;
+    return n;
+  };
+  for (let d = fromDay; d < 7; d++) {
+    if (isClosed(d, wk) || dayShifts.length < 2) continue;
+    const trocaveis = ids.filter(id => {
+      const sh = shiftById(cells[id][d]?.s);
+      return sh && !held(id, d) && !normId(state.employees[id].fixed?.[d])
+        && !sh.night && !sh.onlyDuty && !sh.back && !sh.noClip;
+    });
+    if (trocaveis.length < 2) continue;
+    /* Grupos com o mesmo número de horas: dentro de cada um os turnos podem andar à volta. */
+    const grupos = {};
+    for (const id of trocaveis) {
+      const sh = shiftOn(shiftById(cells[id][d].s), d, wk);
+      const k = Math.round(hoursOf(sh, '', cells[id][d].ld || lunchMinLen()).work * 60);
+      (grupos[k] = grupos[k] || []).push(id);
+    }
+    for (const grupo of Object.values(grupos)) {
+      if (grupo.length < 2) continue;
+      const porDistribuir = grupo.map(id => cells[id][d].s);
+      for (const id of baralhar(grupo.slice())) {
+        const atual = cells[id][d].s;
+        const possiveis = porDistribuir
+          .map((sid, i) => ({ sid, i }))
+          .filter(o => o.sid === atual || hardOk(id, d, o.sid, cellsLookup));
+        if (!possiveis.length) {
+          const i = porDistribuir.indexOf(atual);
+          if (i >= 0) porDistribuir.splice(i, 1);
+          continue;
+        }
+        /* Fica com o turno que menos fez nas últimas quatro semanas. */
+        const menos = Math.min(...possiveis.map(o => turnosAntes(id, o.sid)));
+        const escolha = baralhar(possiveis.filter(o => turnosAntes(id, o.sid) === menos))[0];
+        cells[id][d].s = escolha.sid;
+        porDistribuir.splice(escolha.i, 1);
+      }
     }
   }
   /* 7. Backoffice e almoços */

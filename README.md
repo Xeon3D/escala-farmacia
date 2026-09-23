@@ -259,6 +259,15 @@ Os campos de data são escritos em **dia/mês/ano** (`24/12/2026`; também aceit
 a domingo. Não se usa o campo de data do navegador, que aparecia em inglês e no formato
 americano. As horas seguem o mesmo princípio: sempre `HH:MM` em 24 horas.
 
+## Variedade na geração
+
+Depois de nivelar o balcão, a geração **roda os turnos entre quem trabalha no mesmo dia**:
+trocar turnos entre duas pessoas não muda quantas pessoas estão ao balcão em cada meia
+hora, por isso as trocas são de graça. Só se trocam turnos com as mesmas horas (ninguém
+ganha nem perde horas) e cada pessoa fica com o turno que menos fez nas últimas quatro
+semanas, com os empates decididos à sorte. Sem isto, o nivelamento é determinista e saía
+sempre a mesma escala, com a mesma pessoa a abrir todos os dias.
+
 ## Imprimir
 
 O botão **Imprimir** do separador *Horário* manda para a folha apenas o essencial: o
