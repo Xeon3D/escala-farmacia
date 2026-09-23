@@ -4,6 +4,14 @@ Cada versão tem um cabeçalho `## versão — data` e uma lista de pontos. A ap
 aos administradores as entradas mais recentes do que a versão instalada quando procura
 atualizações.
 
+## 1.6.12 — 2026-09-23
+- Turnos podem ficar fora do horário de abertura (ex.: sábado 08:00–12:00) e contar sem horas nocturnas.
+- Limpar semana deixa de apagar férias e baixas médicas.
+- Tirar o dia todo com o ajuste de horas dá 0 h; antes contava 24 h.
+- Datas em dia/mês/ano, com calendário em português.
+- Ao imprimir sai só o logótipo, a semana e a escala, sem totais nem a linha «ao balcão».
+- Menu da célula mais largo e fixo no sítio ao ajustar horas.
+
 ## 1.6.11 — 2026-09-23
 - Um dia encurtado pelo ajuste de horas para 4 h ou menos passa a ser feito sem almoço.
 - Menu da célula mais largo e fixo no sítio: ao carregar no − ou no + já não foge debaixo do rato.

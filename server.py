@@ -26,7 +26,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-APP_VERSION = "1.6.11"
+APP_VERSION = "1.6.12"
 
 ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT / "public"
